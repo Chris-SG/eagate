@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"container/list"
 	"fmt"
+	"github.com/chris-sg/eagate/util"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -11,7 +12,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/chris-sg/eagate/util"
+	//"github.com/chris-sg/eagate/util"
 	"github.com/PuerkitoBio/goquery"
 )
 
@@ -51,7 +52,7 @@ func SongIds(client *http.Client) (*list.List, error) {
 		contentType, ok := res.Header["Content-Type"]
 		if ok && len(contentType) > 0 {
 			if strings.Contains(res.Header["Content-Type"][0], "Windows-31J") {
-				body = util.ShiftJISBytesToUTF8Bytes(body)
+				//body = util.ShiftJISBytesToUTF8Bytes(body)
 			}
 		}
 
