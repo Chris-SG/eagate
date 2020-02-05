@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"net/http"
-	"net/http/cookiejar"
 	"net/url"
 	"reflect"
 	"regexp"
