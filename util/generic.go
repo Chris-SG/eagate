@@ -16,21 +16,6 @@ import (
 	"golang.org/x/text/transform"
 )
 
-// GenerateClient will generate a http.client that is
-// used by this library.
-func GenerateClient() *http.Client {
-	jar, _ := cookiejar.New(nil)
-
-	client := &http.Client{
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-		Jar: jar,
-	}
-
-	return client
-}
-
 // CheckJarForCookies will search a client's cookiejar for cookies.
 func CheckJarForCookies(client *http.Client) bool {
 	pigate, _ := url.Parse("https://p.eagate.573.jp/")

@@ -2,9 +2,7 @@ package ddr
 
 import (
 	"bytes"
-	"container/list"
 	"fmt"
-	"github.com/chris-sg/eagate/util"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -12,8 +10,8 @@ import (
 	"strings"
 	"sync"
 
-	//"github.com/chris-sg/eagate/util"
 	"github.com/PuerkitoBio/goquery"
+	"github.com/chris-sg/eagate/util"
 )
 
 type Song struct {
@@ -25,20 +23,19 @@ type Song struct {
 
 var (
 	mtx = &sync.Mutex{}
-	lst = list.New()
+	lst = make([]string, 0)
 )
 
 // SongIds retrieves all song ids
-func SongIds(client *http.Client) (*list.List, error) {
+func SongIds(client *http.Client) ([]string, error) {
 	const musicDataURI = "https://p.eagate.573.jp/game/ddr/ddra20/p/playdata/music_data_single.html?offset={page}&filter=0&filtertype=0&sorttype=0"
 	const baseDetail = "/game/ddr/ddra20/p/playdata/music_detail.html?index="
-	const maxSongsPerPage = 50
 
 	totalPages := 0
-	songsRead := maxSongsPerPage
+	songsRead := 0
 
 	{
-		currentPageURI := strings.Replace(musicDataURI, "{page}", strconv.Itoa(page), -1)
+		currentPageURI := strings.Replace(musicDataURI, "{page}", strconv.Itoa(0), -1)
 		res, err := client.Get(currentPageURI)
 
 		if err != nil {
@@ -52,7 +49,7 @@ func SongIds(client *http.Client) (*list.List, error) {
 		contentType, ok := res.Header["Content-Type"]
 		if ok && len(contentType) > 0 {
 			if strings.Contains(res.Header["Content-Type"][0], "Windows-31J") {
-				//body = util.ShiftJISBytesToUTF8Bytes(body)
+				body = util.ShiftJISBytesToUTF8Bytes(body)
 			}
 		}
 
@@ -67,7 +64,58 @@ func SongIds(client *http.Client) (*list.List, error) {
 		})
 	}
 
+	wg := new(sync.WaitGroup)
+	wg.Add(totalPages)
 
+	for idx := 0; idx < totalPages; idx++ {
+		go func(currPage int) {
+			defer wg.Done()
+
+			currentPageURI := strings.Replace(musicDataURI, "{page}", strconv.Itoa(idx), -1)
+			res, err := client.Get(currentPageURI)
+
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			defer res.Body.Close()
+			body, err := ioutil.ReadAll(res.Body)
+
+			contentType, ok := res.Header["Content-Type"]
+			if ok && len(contentType) > 0 {
+				if strings.Contains(res.Header["Content-Type"][0], "Windows-31J") {
+					body = util.ShiftJISBytesToUTF8Bytes(body)
+				}
+			}
+
+			doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
+
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			internalList := make([]string, 0)
+
+			doc.Find("tr.data").Each(func(i int, s *goquery.Selection) {
+				aElement := s.Find("a").First()
+				href, exists := aElement.Attr("href")
+				if exists {
+					id := strings.Replace(href, baseDetail, "", -1)
+					internalList = append(internalList, id)
+					songsRead++
+				}
+			})
+			defer mtx.Unlock()
+			mtx.Lock()
+			lst = append(lst, internalList...)
+		}(idx)
+	}
 
 	return lst, nil
+}
+
+func SongData(client *http.Client, songIds []string) []Song {
+	const baseDetail = "/game/ddr/ddra20/p/playdata/music_detail.html?index="
+
+
 }
