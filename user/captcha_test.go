@@ -1,7 +1,11 @@
 package user
 
-import "testing"
+import (
+	"runtime"
+	"testing"
+)
 
 func TestCaptcha(t *testing.T) {
-	SolveCaptcha()
+	_, fn, _, _ := runtime.Caller(0)
+	t.Logf("%s\n", fn)
 }

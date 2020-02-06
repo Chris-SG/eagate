@@ -69,11 +69,12 @@ func SongIds(client *http.Client) ([]string, error) {
 
 	for idx := 0; idx < totalPages; idx++ {
 		go func(currPage int) {
-			defer wg.Done()
 			fmt.Printf("working on page %d\n", currPage)
+			defer wg.Done()
 
-			currentPageURI := strings.Replace(musicDataURI, "{page}", strconv.Itoa(idx), -1)
+			currentPageURI := strings.Replace(musicDataURI, "{page}", strconv.Itoa(currPage), -1)
 			res, err := client.Get(currentPageURI)
+			fmt.Printf("got page %s\n", currentPageURI)
 
 			if err != nil {
 				log.Fatal(err)
@@ -90,6 +91,7 @@ func SongIds(client *http.Client) ([]string, error) {
 			}
 
 			doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
+			//fmt.Println(doc.Text())
 
 			if err != nil {
 				log.Fatal(err)
@@ -98,7 +100,6 @@ func SongIds(client *http.Client) ([]string, error) {
 			internalList := make([]string, 0)
 
 			doc.Find("tr.data").Each(func(i int, s *goquery.Selection) {
-				fmt.Println("Found one...")
 				aElement := s.Find("a").First()
 				href, exists := aElement.Attr("href")
 				if exists {
@@ -112,6 +113,10 @@ func SongIds(client *http.Client) ([]string, error) {
 			lst = append(lst, internalList...)
 		}(idx)
 	}
+
+	wg.Wait()
+
+	fmt.Println(len(lst))
 
 	return lst, nil
 }
