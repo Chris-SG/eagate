@@ -1,10 +1,7 @@
 package ddr
 
 import (
-	"bytes"
 	"fmt"
-	"io/ioutil"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -31,35 +28,9 @@ func SongIds(client *http.Client) ([]string, error) {
 	const musicDataURI = "https://p.eagate.573.jp/game/ddr/ddra20/p/playdata/music_data_single.html?offset={page}&filter=0&filtertype=0&sorttype=0"
 	const baseDetail = "/game/ddr/ddra20/p/playdata/music_detail.html?index="
 
-	totalPages := 0
-	songsRead := 0
-
-	{
-		currentPageURI := strings.Replace(musicDataURI, "{page}", strconv.Itoa(0), -1)
-		res, err := client.Get(currentPageURI)
-
-		if err != nil {
-			fmt.Print(err)
-			return lst, err
-		}
-
-		defer res.Body.Close()
-		body, err := ioutil.ReadAll(res.Body)
-
-		contentType, ok := res.Header["Content-Type"]
-		if ok && len(contentType) > 0 {
-			if strings.Contains(res.Header["Content-Type"][0], "Windows-31J") {
-				body = util.ShiftJISBytesToUTF8Bytes(body)
-			}
-		}
-
-		doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
-
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		totalPages = doc.Find("div#paging_box").First().Find("div.page_num").Length()
+	totalPages, err := songPageCount(client)
+	if err != nil {
+		return nil, err
 	}
 
 	fmt.Println(totalPages)
@@ -67,34 +38,18 @@ func SongIds(client *http.Client) ([]string, error) {
 	wg := new(sync.WaitGroup)
 	wg.Add(totalPages)
 
+	errorCount := 0
+
 	for idx := 0; idx < totalPages; idx++ {
 		go func(currPage int) {
-			fmt.Printf("working on page %d\n", currPage)
 			defer wg.Done()
 
 			currentPageURI := strings.Replace(musicDataURI, "{page}", strconv.Itoa(currPage), -1)
-			res, err := client.Get(currentPageURI)
-			fmt.Printf("got page %s\n", currentPageURI)
+			doc, err := util.GetPageContentAsGoQuery(client, currentPageURI)
 
 			if err != nil {
-				log.Fatal(err)
-			}
-
-			defer res.Body.Close()
-			body, err := ioutil.ReadAll(res.Body)
-
-			contentType, ok := res.Header["Content-Type"]
-			if ok && len(contentType) > 0 {
-				if strings.Contains(res.Header["Content-Type"][0], "Windows-31J") {
-					body = util.ShiftJISBytesToUTF8Bytes(body)
-				}
-			}
-
-			doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
-			//fmt.Println(doc.Text())
-
-			if err != nil {
-				log.Fatal(err)
+				errorCount++
+				return
 			}
 
 			internalList := make([]string, 0)
@@ -105,57 +60,87 @@ func SongIds(client *http.Client) ([]string, error) {
 				if exists {
 					id := strings.Replace(href, baseDetail, "", -1)
 					internalList = append(internalList, id)
-					songsRead++
 				}
 			})
-			defer mtx.Unlock()
 			mtx.Lock()
+			defer mtx.Unlock()
 			lst = append(lst, internalList...)
 		}(idx)
 	}
 
 	wg.Wait()
 
-	fmt.Println(len(lst))
+	if errorCount > 0 {
+		return lst, fmt.Errorf("failed to load all songs ids, %d/%d pages failed", errorCount, totalPages)
+	}
 
 	return lst, nil
 }
 
-func SongData(client *http.Client, songIds []string) []Song {
-	const baseDetail = "/game/ddr/ddra20/p/playdata/music_detail.html?index="
+func songPageCount(client *http.Client) (int, error) {
+	const musicDataURI = "https://p.eagate.573.jp/game/ddr/ddra20/p/playdata/music_data_single.html?offset={page}&filter=0&filtertype=0&sorttype=0"
 
+	currentPageURI := strings.Replace(musicDataURI, "{page}", strconv.Itoa(0), -1)
+	doc, err := util.GetPageContentAsGoQuery(client, currentPageURI)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get music data page")
+	}
+	return doc.Find("div#paging_box").First().Find("div.page_num").Length(), nil
+}
+
+func SongData(client *http.Client, songIds []string) ([]Song, error) {
+
+	var (
+		songMtx = &sync.Mutex{}
+		songLst = make([]Song, 0)
+	)
+
+	const baseDetail = "https://p.eagate.573.jp/game/ddr/ddra20/p/playdata/music_detail.html?index="
+
+	wg := new(sync.WaitGroup)
+	wg.Add(len(songIds))
+
+	errorCount := 0
 
 	for _, id := range songIds {
-		res, err := client.Get(baseDetail + id)
-		defer res.Body.Close()
+		go func(songId string, songList *[]Song) {
+			defer wg.Done()
+			doc, err := util.GetPageContentAsGoQuery(client, baseDetail + songId)
+			fmt.Printf("Starting song id %s\n", songId)
 
-		if err != nil {
-			fmt.Println(err)
-			continue
-		}
-
-		body, err := ioutil.ReadAll(res.Body)
-
-		contentType, ok := res.Header["Content-Type"]
-		if ok && len(contentType) > 0 {
-			if strings.Contains(res.Header["Content-Type"][0], "Windows-31J") {
-				body = util.ShiftJISBytesToUTF8Bytes(body)
+			if err != nil {
+				errorCount++
+				return
 			}
-		}
 
-		doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
+			song := Song{ Id: songId }
 
-		if err != nil {
-			fmt.Println(err)
-			continue
-		}
+			doc.Find("table#music_info").First().Find("td").Each(func(i int, s *goquery.Selection) {
+				img := s.Find("img")
+				if img.Length() == 0 {
+					html, _ := s.Html()
+					fmt.Println(html)
+				} else {
 
-		doc.Find("table#music_info").First().Find("td").Each(func(i int, s *goquery.Selection) {
-			img := s.Find("img")
-			if img.Length() == 0 {
-				fmt.Println(s.Contents().Text())
-			}
-		})
+					imgPath, exists := img.First().Attr("src")
+					if exists {
+						fmt.Println(imgPath)
+					}
+					song.Image = imgPath
+				}
+			})
+
+			songMtx.Lock()
+			defer songMtx.Unlock()
+			*songList = append(*songList, song)
+		}(id, &songLst)
 	}
-	return make([]Song, 0)
+
+	wg.Wait()
+
+	if errorCount > 0 {
+		return songLst, fmt.Errorf("failed to load all song data, %d/%d songs failed", errorCount, len(songIds))
+	}
+
+	return songLst, nil
 }

@@ -3,11 +3,13 @@ package util
 import (
 	"bytes"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"reflect"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
@@ -121,4 +123,25 @@ func TableThTd(selection *goquery.Selection) (map[string]string, error) {
 		return results, nil
 	}
 	return make(map[string]string), fmt.Errorf("query selection is not of type table")
+}
+
+func GetPageContentAsGoQuery(client *http.Client, resource string) (*goquery.Document, error) {
+	res, err := client.Get(resource)
+
+	if err != nil {
+		fmt.Println(err)
+		return nil, err
+	}
+
+	defer res.Body.Close()
+	body, err := ioutil.ReadAll(res.Body)
+
+	contentType, ok := res.Header["Content-Type"]
+	if ok && len(contentType) > 0 {
+		if strings.Contains(res.Header["Content-Type"][0], "Windows-31J") {
+			body = ShiftJISBytesToUTF8Bytes(body)
+		}
+	}
+
+	return goquery.NewDocumentFromReader(bytes.NewReader(body))
 }
