@@ -1,17 +1,17 @@
 package ea_db
 
 import (
-	"database/sql"
 	"fmt"
 	"log"
 
 	_ "github.com/lib/pq"
+	"github.com/jmoiron/sqlx"
 )
 
-func CreateDbConnection(user string, password string, dbname string, host string) (*sql.DB, error) {
+func CreateDbConnection(user string, password string, dbname string, host string) (*sqlx.DB, error) {
 	connStr := fmt.Sprintf( "user=%s password=%s dbname=%s host=%s sslmode=disable", user, password, dbname, host)
 
-	db, err := sql.Open("postgres", connStr)
+	db, err := sqlx.Open("postgres", connStr)
 	if err != nil {
 		return nil, err
 	}
@@ -19,8 +19,8 @@ func CreateDbConnection(user string, password string, dbname string, host string
 	return db, nil
 }
 
-func ExecuteQuery(db *sql.DB, query string) (*sql.Rows, error) {
-	rows, err := db.Query(query)
+func ExecuteQuery(db *sqlx.DB, query string) (*sqlx.Rows, error) {
+	rows, err := db.Queryx(query)
 	if err != nil {
 		log.Fatal(err)
 	}

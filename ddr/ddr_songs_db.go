@@ -1,11 +1,11 @@
 package ddr
 
 import (
-	"database/sql"
 	"github.com/chris-sg/eagate/ea_db"
+	"github.com/jmoiron/sqlx"
 )
 
-func LoadSongsDB(db *sql.DB) ([]Song, error) {
+func LoadSongsDB(db *sqlx.DB) ([]Song, error) {
 	queryString := `SELECT * FROM "ddrSongs"`
 	rows, err := ea_db.ExecuteQuery(db, queryString)
 	if err != nil {
@@ -13,9 +13,13 @@ func LoadSongsDB(db *sql.DB) ([]Song, error) {
 	}
 
 	var songs []Song
-	err = rows.Scan(&songs)
-	if err != nil {
-		return nil, err
+	for rows.Next() {
+		var song Song
+		err = rows.StructScan(&song)
+		if err != nil {
+			return nil, err
+		}
+		songs = append(songs, song)
 	}
 
 	return songs, nil
