@@ -84,7 +84,8 @@ func SetStructValues(structType reflect.Type, structValue reflect.Value, data ma
 					}
 				case "time.Time":
 					format := "2006-01-02 15:04:05"
-					t, err := time.Parse(format, val)
+					loc, _ := time.LoadLocation("JST")
+					t, err := time.ParseInLocation(format, val, loc)
 					if err == nil {
 						structValue.Elem().FieldByIndex([]int{i}).Set(reflect.ValueOf(t))
 					}

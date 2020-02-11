@@ -17,8 +17,8 @@ import (
 	"github.com/chris-sg/eagate/util"
 )
 
-// PlayerInformationDetaills stores information for a player.
-type PlayerInformationDetaills struct {
+// PlayerInformationDetails stores information for a player.
+type PlayerInformationDetails struct {
 	Name               string    `tag:"ダンサーネーム_sougou"`
 	Code               int       `tag:"DDR-CODE_sougou"`
 	Prefecture         string    `tag:"所属都道府県_sougou"`
@@ -46,32 +46,15 @@ func ddrGetLampMap() map[string]int8 {
 // PlayerInformation retrieves the base player
 // information using the provided cookie.
 func PlayerInformation(client *http.Client) error {
-	const playerInformationPage = "https://p.eagate.573.jp/game/ddr/ddra20/p/playdata/index.html"
+	const playerInformationResource = "/game/ddr/ddra20/p/playdata/index.html"
 
-	res, err := client.Get(playerInformationPage)
-
+	playerInformationURI := util.BuildEaURI(playerInformationResource)
+	doc, err := util.GetPageContentAsGoQuery(client, playerInformationURI)
 	if err != nil {
-		fmt.Print(err)
 		return err
 	}
 
-	defer res.Body.Close()
-	body, err := ioutil.ReadAll(res.Body)
-
-	contentType, ok := res.Header["Content-Type"]
-	if ok && len(contentType) > 0 {
-		if strings.Contains(res.Header["Content-Type"][0], "Windows-31J") {
-			body = util.ShiftJISBytesToUTF8Bytes(body)
-		}
-	}
-
-	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	pi := PlayerInformationDetaills{}
+	pi := PlayerInformationDetails{}
 	piType := reflect.TypeOf(pi)
 
 	doc.Find("div").Each(func(i int, s *goquery.Selection) {
