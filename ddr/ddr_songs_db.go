@@ -9,7 +9,7 @@ func LoadSongIdsDB() ([]string, error) {
 	ids := []string{}
 	db := ea_db.GetDb()
 
-	err := db.Get(&ids, `SELECT song_id FROM "ddrSongs"`)
+	err := db.Get(&ids, `SELECT song_id FROM public."ddrSongs"`)
 	if err != nil {
 		return nil, err
 	}
@@ -17,7 +17,7 @@ func LoadSongIdsDB() ([]string, error) {
 }
 
 func LoadSongsDB() ([]Song, error) {
-	queryString := `SELECT * FROM "ddrSongs"`
+	queryString := `SELECT * FROM public."ddrSongs"`
 	rows, err := ea_db.ExecuteQuery(queryString)
 	if err != nil {
 		return nil, err
@@ -39,7 +39,7 @@ func LoadSongsDB() ([]Song, error) {
 func UpdateSongsDb(songs []Song) error {
 	db := ea_db.GetDb()
 
-	result, err := db.NamedExec(`INSERT INTO "ddrSongs" ('song_id', 'song_name', 'song_artist', 'song_image') VALUES (:Id, :Name, :Artist, :Image) ON CONFLICT ('song_id') DO NOTHING`, songs)
+	result, err := db.NamedExec(`INSERT INTO public."ddrSongs" (song_id, song_name, song_artist, song_image) VALUES (:song_id, :song_name, :song_artist, :song_image) ON CONFLICT (song_id) DO NOTHING`, songs)
 	if err != nil {
 		return err
 	}
@@ -51,7 +51,7 @@ func UpdateSongsDb(songs []Song) error {
 
 func GetSongIdsNotInDb(ids []string) []string {
 	var dbIds []string
-	rows, err := ea_db.ExecuteQuery(`SELECT user_id FROM "ddrSongs"`)
+	rows, err := ea_db.ExecuteQuery(`SELECT song_id FROM public."ddrSongs"`)
 	if err != nil {
 		return nil
 	}
@@ -62,7 +62,7 @@ func GetSongIdsNotInDb(ids []string) []string {
 	}
 
 	check := map[string]struct{}{}
-	result := []string{}
+	var result []string
 
 	for _, id := range dbIds {
 		check[id] = struct{}{}

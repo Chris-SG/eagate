@@ -1,6 +1,7 @@
 package ea_db
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 
@@ -30,6 +31,10 @@ func ExecuteQuery(query string) (*sqlx.Rows, error) {
 		log.Fatal(err)
 	}
 	return rows, nil
+}
+
+func ExecuteInsert(query string) (sql.Result, error) {
+	return activeDb.Exec(query)
 }
 
 func GetDb() *sqlx.DB {

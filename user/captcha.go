@@ -74,35 +74,55 @@ func getChecksums() map[string]string {
 	}
 }
 
+func AddCookiesToJar(client *http.Client, cookies []*http.Cookie) {
+	eagate, _ := url.Parse("https://p.eagate.573.jp")
+	client.Jar.SetCookies(eagate, cookies)
+}
+
+func FindCookieByName(username string) (*http.Cookie, error) {
+	cookie := loadCookieFromDb(username)
+	if cookie == nil {
+		return nil, fmt.Errorf("cookie does not exist")
+	}
+	return cookie, nil
+}
+
 // LoginRequest will submit a request to login as the given
 // username with the provided password. This does not yet
 // support a OTP.
 func LoginRequest(username string, password string, client *http.Client) error {
-	const eagateLoginAuthResource = "/gate/p/common/login/api/login_auth.html"
-
-	eagateLoginAuthURI := util.BuildEaURI(eagateLoginAuthResource)
-
-	session, correct, err := SolveCaptcha(client)
-
+	cookie, err := FindCookieByName(username)
+	var cookies []*http.Cookie
 	if err != nil {
-		return err
+		const eagateLoginAuthResource = "/gate/p/common/login/api/login_auth.html"
+
+		eagateLoginAuthURI := util.BuildEaURI(eagateLoginAuthResource)
+
+		session, correct, err := SolveCaptcha(client)
+
+		if err != nil {
+			return err
+		}
+
+		form := url.Values{}
+
+		captchaResult := "k_" + session + correct
+		form.Add("login_id", username)
+		form.Add("pass_word", password)
+		form.Add("captcha", captchaResult)
+
+		//res, err := http.NewRequest("POST", eagateLoginAuth, strings.NewReader(form.Encode()))
+		res, err := client.PostForm(eagateLoginAuthURI, form)
+
+		if err != nil {
+			return err
+		}
+
+		cookies = res.Cookies()
+		writeCookieToDb(username, cookies[0])
+	} else {
+		cookies = []*http.Cookie{cookie}
 	}
-
-	form := url.Values{}
-
-	captchaResult := "k_" + session + correct
-	form.Add("login_id", username)
-	form.Add("pass_word", password)
-	form.Add("captcha", captchaResult)
-
-	//res, err := http.NewRequest("POST", eagateLoginAuth, strings.NewReader(form.Encode()))
-	res, err := client.PostForm(eagateLoginAuthURI, form)
-
-	if err != nil {
-		return err
-	}
-
-	cookies := res.Cookies()
 
 	if len(cookies) > 0 {
 		eagate, _ := url.Parse("https://p.eagate.573.jp")
