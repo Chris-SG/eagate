@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/chris-sg/eagate/util"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -77,7 +78,9 @@ func getChecksums() map[string]string {
 // username with the provided password. This does not yet
 // support a OTP.
 func LoginRequest(username string, password string, client *http.Client) error {
-	const eagateLoginAuth = "https://p.eagate.573.jp/gate/p/common/login/api/login_auth.html"
+	const eagateLoginAuthResource = "/gate/p/common/login/api/login_auth.html"
+
+	eagateLoginAuthURI := util.BuildEaURI(eagateLoginAuthResource)
 
 	session, correct, err := SolveCaptcha(client)
 
@@ -93,7 +96,7 @@ func LoginRequest(username string, password string, client *http.Client) error {
 	form.Add("captcha", captchaResult)
 
 	//res, err := http.NewRequest("POST", eagateLoginAuth, strings.NewReader(form.Encode()))
-	res, err := client.PostForm(eagateLoginAuth, form)
+	res, err := client.PostForm(eagateLoginAuthURI, form)
 
 	if err != nil {
 		return err
@@ -102,7 +105,7 @@ func LoginRequest(username string, password string, client *http.Client) error {
 	cookies := res.Cookies()
 
 	if len(cookies) > 0 {
-		eagate, _ := url.Parse("https://p.eagate.573.jp/")
+		eagate, _ := url.Parse("https://p.eagate.573.jp")
 		client.Jar.SetCookies(eagate, cookies)
 	} else {
 		return fmt.Errorf("no cookies found")
@@ -115,9 +118,11 @@ func LoginRequest(username string, password string, client *http.Client) error {
 // It returns a string containing the captcha session, a slice containing
 // all correct keys, and any errors encountered.
 func SolveCaptcha(client *http.Client) (string, string, error) {
-	const eagateCaptchaGenerate = "https://p.eagate.573.jp/gate/p/common/login/api/kcaptcha_generate.html"
+	const eagateCaptchaGenerateResource = "/gate/p/common/login/api/kcaptcha_generate.html"
 
-	res, err := client.Get(eagateCaptchaGenerate)
+	eagateCaptchaGenerateURI := util.BuildEaURI(eagateCaptchaGenerateResource)
+
+	res, err := client.Get(eagateCaptchaGenerateURI)
 	if err != nil {
 		return "", "", err
 	}

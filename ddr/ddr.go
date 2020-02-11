@@ -95,62 +95,6 @@ func PlayerInformation(client *http.Client) error {
 	return nil
 }
 
-// MusicList retrieves the music list.
-func MusicList(client *http.Client) (map[string]string, error) {
-	const musicDataURI = "https://p.eagate.573.jp/game/ddr/ddra20/p/playdata/music_data_single.html?offset={page}&filter=0&filtertype=0&sorttype=0"
-	const baseDetail = "/game/ddr/ddra20/p/playdata/music_detail.html?index="
-	const maxSongsPerPage = 50
-
-	page := 0
-	songsRead := maxSongsPerPage
-
-	musicList := make(map[string]string)
-
-	for songsRead == maxSongsPerPage {
-		songsRead = 0
-		currentPageURI := strings.Replace(musicDataURI, "{page}", strconv.Itoa(page), -1)
-		fmt.Printf("Reading page %d: %s\n", page, currentPageURI)
-		res, err := client.Get(currentPageURI)
-
-		if err != nil {
-			fmt.Print(err)
-			return musicList, err
-		}
-
-		defer res.Body.Close()
-		body, err := ioutil.ReadAll(res.Body)
-
-		contentType, ok := res.Header["Content-Type"]
-		if ok && len(contentType) > 0 {
-			if strings.Contains(res.Header["Content-Type"][0], "Windows-31J") {
-				body = util.ShiftJISBytesToUTF8Bytes(body)
-			}
-		}
-
-		doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
-
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		doc.Find("tr.data").Each(func(i int, s *goquery.Selection) {
-			aElement := s.Find("a").First()
-			href, exists := aElement.Attr("href")
-			if exists {
-				id := strings.Replace(href, baseDetail, "", -1)
-				fmt.Printf("%s is %s\n", id, aElement.Text())
-				musicList[id] = aElement.Text()
-				songsRead++
-				//	}
-
-			}
-		})
-		page++
-	}
-
-	return musicList, nil
-}
-
 // Score defines a score from DDR
 type Score struct {
 	Score      int `tag:"ハイスコア"`

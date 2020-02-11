@@ -145,3 +145,8 @@ func GetPageContentAsGoQuery(client *http.Client, resource string) (*goquery.Doc
 
 	return goquery.NewDocumentFromReader(bytes.NewReader(body))
 }
+
+func BuildEaURI(resource string) string {
+	const ea = "https://p.eagate.573.jp"
+	return ea + resource
+}

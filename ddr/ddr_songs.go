@@ -1,7 +1,9 @@
 package ddr
 
 import (
+	"encoding/base64"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"strconv"
 	"strings"
@@ -23,10 +25,26 @@ var (
 	lst = make([]string, 0)
 )
 
+func UpdateSongs(client *http.Client) error {
+	songs, err := SongIds(client)
+	if err != nil {
+		return err
+	}
+	newSongs := GetSongIdsNotInDb(songs)
+	songData, err := SongData(client, newSongs)
+	if err != nil {
+		return err
+	}
+	err = UpdateSongsDb(songData)
+	return err
+}
+
 // SongIds retrieves all song ids
 func SongIds(client *http.Client) ([]string, error) {
-	const musicDataURI = "https://p.eagate.573.jp/game/ddr/ddra20/p/playdata/music_data_single.html?offset={page}&filter=0&filtertype=0&sorttype=0"
+	const musicDataResource = "/game/ddr/ddra20/p/playdata/music_data_single.html?offset={page}&filter=0&filtertype=0&sorttype=0"
 	const baseDetail = "/game/ddr/ddra20/p/playdata/music_detail.html?index="
+
+	musicDataURI := util.BuildEaURI(musicDataResource)
 
 	totalPages, err := songPageCount(client)
 	if err != nil {
@@ -78,7 +96,9 @@ func SongIds(client *http.Client) ([]string, error) {
 }
 
 func songPageCount(client *http.Client) (int, error) {
-	const musicDataURI = "https://p.eagate.573.jp/game/ddr/ddra20/p/playdata/music_data_single.html?offset={page}&filter=0&filtertype=0&sorttype=0"
+	const musicDataResource = "/game/ddr/ddra20/p/playdata/music_data_single.html?offset={page}&filter=0&filtertype=0&sorttype=0"
+
+	musicDataURI := util.BuildEaURI(musicDataResource)
 
 	currentPageURI := strings.Replace(musicDataURI, "{page}", strconv.Itoa(0), -1)
 	doc, err := util.GetPageContentAsGoQuery(client, currentPageURI)
@@ -95,7 +115,9 @@ func SongData(client *http.Client, songIds []string) ([]Song, error) {
 		songLst = make([]Song, 0)
 	)
 
-	const baseDetail = "https://p.eagate.573.jp/game/ddr/ddra20/p/playdata/music_detail.html?index="
+	const baseDetail = "/game/ddr/ddra20/p/playdata/music_detail.html?index="
+
+	baseDetailURI := util.BuildEaURI(baseDetail)
 
 	wg := new(sync.WaitGroup)
 	wg.Add(len(songIds))
@@ -105,7 +127,7 @@ func SongData(client *http.Client, songIds []string) ([]Song, error) {
 	for _, id := range songIds {
 		go func(songId string, songList *[]Song) {
 			defer wg.Done()
-			doc, err := util.GetPageContentAsGoQuery(client, baseDetail + songId)
+			doc, err := util.GetPageContentAsGoQuery(client, baseDetailURI + songId)
 			fmt.Printf("Starting song id %s\n", songId)
 
 			if err != nil {
@@ -119,16 +141,30 @@ func SongData(client *http.Client, songIds []string) ([]Song, error) {
 				img := s.Find("img")
 				if img.Length() == 0 {
 					html, _ := s.Html()
-					fmt.Println(html)
+					songDataPair := strings.Split(html, "<br/>")
+					song.Name = songDataPair[0]
+					song.Artist = songDataPair[1]
 				} else {
 
 					imgPath, exists := img.First().Attr("src")
 					if exists {
-						fmt.Println(imgPath)
+						imgUrl := fmt.Sprintf("https://p.eagate.573.jp%s", imgPath)
+						imgData, err := client.Get(imgUrl)
+						if err != nil {
+							fmt.Println(err)
+							errorCount++
+						} else {
+							body, err := ioutil.ReadAll(imgData.Body)
+							if err == nil {
+								song.Image = base64.StdEncoding.EncodeToString(body)
+							}
+						}
+						imgData.Body.Close()
 					}
-					song.Image = imgPath
 				}
 			})
+
+			fmt.Printf("%s - %s - %s\n", song.Id, song.Name, song.Artist)
 
 			songMtx.Lock()
 			defer songMtx.Unlock()
