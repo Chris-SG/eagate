@@ -8,6 +8,7 @@ import (
 	"github.com/chris-sg/eagate/util"
 	"io/ioutil"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"regexp"
 )
@@ -74,26 +75,17 @@ func getChecksums() map[string]string {
 	}
 }
 
-func AddCookiesToJar(client *http.Client, cookies []*http.Cookie) {
+// AddCookiesToJar will add a slice of cookies to the
+// provided jar under the eagate URL
+func AddCookiesToJar(jar http.CookieJar, cookies []*http.Cookie) {
 	eagate, _ := url.Parse("https://p.eagate.573.jp")
-	client.Jar.SetCookies(eagate, cookies)
+	jar.SetCookies(eagate, cookies)
 }
 
-func FindCookieByName(username string) (*http.Cookie, error) {
-	cookie := loadCookieFromDb(username)
-	if cookie == nil {
-		return nil, fmt.Errorf("cookie does not exist")
-	}
-	return cookie, nil
-}
-
-// LoginRequest will submit a request to login as the given
+// GetCookieFromEaGate will submit a request to login as the given
 // username with the provided password. This does not yet
 // support a OTP.
-func LoginRequest(username string, password string, client *http.Client) error {
-	cookie, err := FindCookieByName(username)
-	var cookies []*http.Cookie
-	if err != nil {
+func GetCookieFromEaGate(username string, password string, client *http.Client) (*http.Cookie, error) {
 		const eagateLoginAuthResource = "/gate/p/common/login/api/login_auth.html"
 
 		eagateLoginAuthURI := util.BuildEaURI(eagateLoginAuthResource)
@@ -101,7 +93,7 @@ func LoginRequest(username string, password string, client *http.Client) error {
 		session, correct, err := SolveCaptcha(client)
 
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		form := url.Values{}
@@ -115,22 +107,25 @@ func LoginRequest(username string, password string, client *http.Client) error {
 		res, err := client.PostForm(eagateLoginAuthURI, form)
 
 		if err != nil {
-			return err
+			return nil, err
 		}
 
-		cookies = res.Cookies()
-		writeCookieToDb(username, cookies[0])
-	} else {
-		cookies = []*http.Cookie{cookie}
-	}
+		cookies := res.Cookies()
 
-	if len(cookies) > 0 {
-		eagate, _ := url.Parse("https://p.eagate.573.jp")
-		client.Jar.SetCookies(eagate, cookies)
-	} else {
-		return fmt.Errorf("no cookies found")
-	}
+		if len(cookies) == 0 {
+			return nil, fmt.Errorf("could not generate cookie")
+		}
 
+	return cookies[0], nil
+}
+
+func CheckCookieEaGateAccess(client *http.Client, cookie *http.Cookie) error {
+	clientJar := client.Jar
+	tempJar, _ := cookiejar.New(nil)
+	AddCookiesToJar(tempJar, []*http.Cookie{cookie})
+	client.Jar = tempJar
+
+	client.Jar = clientJar
 	return nil
 }
 

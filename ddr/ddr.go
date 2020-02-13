@@ -3,6 +3,7 @@ package ddr
 import (
 	"bytes"
 	"fmt"
+	"github.com/chris-sg/eagate_models/ddr_models"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -89,51 +90,29 @@ type Score struct {
 	Level      int8
 }
 
-// Chart defines a chart from DDR
-type Chart struct {
-	SingleBeginner  Score
-	SingleBasic     Score
-	SingleDifficult Score
-	SingleExpert    Score
-	SingleChallenge Score
-
-	DoubleBasic     Score
-	DoubleDifficult Score
-	DoubleExpert    Score
-	DoubleChallenge Score
-}
-
 //////////////////////
 // Score Info Block //
 //////////////////////
 
-// GetScoreInfo will process the provided musicList and retrieve all
+// GetScoreInfo will process the provided song ids and retrieve all
 // player score information for these songs.
-func GetScoreInfo(client *http.Client, musicList []string) error {
+func GetScoreInfo(client *http.Client, charts []ddr_models.SongDifficulty) ([]ddr_models.SongStatistics, error) {
 	const musicDetail = "https://p.eagate.573.jp/game/ddr/ddra20/p/playdata/music_detail.html?index={id}&diff={diff}"
 
-	scoreInfo := make(map[string]Chart)
+	var songStatistics []ddr_models.SongStatistics
 	wg := new(sync.WaitGroup)
 
-	for _, element := range musicList {
-		chart := Chart{}
-
-		difficulties, err := LoadSongDifficulties(client, &element)
-		if err != nil {
-			return err
-		}
-		for diff := 0; diff < 9; diff++ {
+	for _, chart := range charts {
 			wg.Add(1)
-			go func(currDiff int) {
+			go func(songId string, currDiff int8) {
 				defer wg.Done()
-				score, err := LoadChartDifficultyInfo(client, &element, int8(currDiff))
+				score, err := LoadChartDifficultyInfo(client, songId, currDiff)
 				if err != nil {
 					fmt.Println(err)
 				}
 				score.Level = difficulties[currDiff]
 				reflect.ValueOf(&chart).Elem().FieldByIndex([]int{currDiff}).Set(reflect.ValueOf(score))
-			}(diff)
-		}
+			}(chart.SongId, chart.DifficultyId)
 
 		wg.Wait()
 
@@ -147,31 +126,22 @@ func GetScoreInfo(client *http.Client, musicList []string) error {
 // LoadChartDifficultyInfo will attempt to retrieve score information for a given difficulty.
 // id must match a Song ID (from DDRMusicList) and difficulty must be from 0 to 8.
 // Will return a Score on success, or an error.
-func LoadChartDifficultyInfo(client *http.Client, id *string, difficulty int8) (Score, error) {
-	const musicDetail = "https://p.eagate.573.jp/game/ddr/ddra20/p/playdata/music_detail.html?index={id}&diff={diff}"
-	score := Score{}
+func LoadChartDifficultyInfo(client *http.Client, id string, difficulty int8) (*ddr_models.SongStatistics, error) {
+	const musicDetailResource = "/game/ddr/ddra20/p/playdata/music_detail.html?index={id}&diff={diff}"
 
-	musicDiffDetails := strings.Replace(musicDetail, "{id}", *id, -1)
-	musicDiffDetails = strings.Replace(musicDiffDetails, "{diff}", strconv.Itoa(int(difficulty)), -1)
-	res, err := client.Get(musicDiffDetails)
+	musicDiffDetailsResource := strings.Replace(musicDetailResource, "{id}", id, -1)
+	musicDiffDetailsResource = strings.Replace(musicDiffDetailsResource, "{diff}", strconv.Itoa(int(difficulty)), -1)
+
+	musicDiffDetailsUri := util.BuildEaURI(musicDiffDetailsResource)
+	doc, err := util.GetPageContentAsGoQuery(client, musicDiffDetailsUri)
 
 	if err != nil {
-		fmt.Print(err)
-		return score, err
+		return nil, err
 	}
 
-	defer res.Body.Close()
-	body, err := ioutil.ReadAll(res.Body)
+	songStatistics := ddr_models.SongStatistics{}
 
-	contentType, ok := res.Header["Content-Type"]
-	if ok && len(contentType) > 0 {
-		if strings.Contains(res.Header["Content-Type"][0], "Windows-31J") {
-			body = util.ShiftJISBytesToUTF8Bytes(body)
-		}
-	}
-	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
-
-	scoreType := reflect.TypeOf(score)
+	scoreType := reflect.TypeOf(songStatistics)
 
 	if !bytes.Contains(body, []byte("NO PLAY...")) {
 		musicDetailTable := doc.Find("table#music_detail_table")

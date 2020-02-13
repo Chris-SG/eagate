@@ -12,7 +12,7 @@ import (
 func GenerateClient() *http.Client {
 	jar, _ := cookiejar.New(nil)
 
-	limiter := rate.NewLimiter(10, 5)
+	limiter := rate.NewLimiter(-1, -1)
 
 	client := &http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {

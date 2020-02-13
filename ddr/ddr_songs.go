@@ -3,6 +3,7 @@ package ddr
 import (
 	"encoding/base64"
 	"fmt"
+	"github.com/chris-sg/eagate_models/ddr_models"
 	"io/ioutil"
 	"net/http"
 	"strconv"
@@ -13,31 +14,10 @@ import (
 	"github.com/chris-sg/eagate/util"
 )
 
-type Song struct {
-	Id string `db:"song_id"`
-	Name string `db:"song_name"`
-	Artist string `db:"song_artist"`
-	Image string `db:"song_image"`
-}
-
 var (
 	mtx = &sync.Mutex{}
 	lst = make([]string, 0)
 )
-
-func UpdateSongs(client *http.Client) error {
-	songs, err := SongIds(client)
-	if err != nil {
-		return err
-	}
-	newSongs := GetSongIdsNotInDb(songs)
-	songData, err := SongData(client, newSongs)
-	if err != nil {
-		return err
-	}
-	err = UpdateSongsDb(songData)
-	return err
-}
 
 // SongIds retrieves all song ids
 func SongIds(client *http.Client) ([]string, error) {
@@ -108,11 +88,11 @@ func songPageCount(client *http.Client) (int, error) {
 	return doc.Find("div#paging_box").First().Find("div.page_num").Length(), nil
 }
 
-func SongData(client *http.Client, songIds []string) ([]Song, error) {
+func SongData(client *http.Client, songIds []string) ([]ddr_models.Song, error) {
 
 	var (
 		songMtx = &sync.Mutex{}
-		songLst = make([]Song, 0)
+		songLst = make([]ddr_models.Song, 0)
 	)
 
 	const baseDetail = "/game/ddr/ddra20/p/playdata/music_detail.html?index="
@@ -125,7 +105,7 @@ func SongData(client *http.Client, songIds []string) ([]Song, error) {
 	errorCount := 0
 
 	for _, id := range songIds {
-		go func(songId string, songList *[]Song) {
+		go func(songId string, songList *[]ddr_models.Song) {
 			defer wg.Done()
 			doc, err := util.GetPageContentAsGoQuery(client, baseDetailURI + songId)
 			fmt.Printf("Starting song id %s\n", songId)
@@ -135,7 +115,7 @@ func SongData(client *http.Client, songIds []string) ([]Song, error) {
 				return
 			}
 
-			song := Song{ Id: songId }
+			song := ddr_models.Song{ Id: songId }
 
 			doc.Find("table#music_info").First().Find("td").Each(func(i int, s *goquery.Selection) {
 				img := s.Find("img")
