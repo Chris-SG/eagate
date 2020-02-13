@@ -124,8 +124,11 @@ func CheckCookieEaGateAccess(client *http.Client, cookie *http.Cookie) error {
 	tempJar, _ := cookiejar.New(nil)
 	AddCookiesToJar(tempJar, []*http.Cookie{cookie})
 	client.Jar = tempJar
-
+	res, err := client.Get("https://p.eagate.573.jp/gate/p/mypage/index.html")
 	client.Jar = clientJar
+	if err != nil || res.StatusCode != 200 {
+		return fmt.Errorf("cookie is no longer valid")
+	}
 	return nil
 }
 

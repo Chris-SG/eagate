@@ -6,6 +6,7 @@ import (
 	"github.com/chris-sg/eagate_models/ddr_models"
 	"io/ioutil"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -159,4 +160,68 @@ func SongData(client *http.Client, songIds []string) ([]ddr_models.Song, error) 
 	}
 
 	return songLst, nil
+}
+
+// LoadSongDifficulties will lload allll the difficulty levels for
+// a provided song ID.
+func SongDifficulties(client *http.Client, ids []string) ([]ddr_models.SongDifficulty, error) {
+
+	var (
+		songMtx = &sync.Mutex{}
+		difficultyList = make([]ddr_models.SongDifficulty, 0)
+	)
+
+	const musicDetailResource = "/game/ddr/ddra20/p/playdata/music_detail.html?index={id}&diff=0"
+
+	musicDetailUri := util.BuildEaURI(musicDetailResource)
+
+	wg := new(sync.WaitGroup)
+	wg.Add(len(ids))
+
+	errorCount := 0
+
+	for _, id := range ids {
+		go func(songId string, difficulties *[]ddr_models.SongDifficulty) {
+			defer wg.Done()
+			musicDiffDetails := strings.Replace(musicDetailUri, "{id}", songId, -1)
+
+			doc, err := util.GetPageContentAsGoQuery(client, musicDiffDetails)
+
+			if err != nil {
+				errorCount++
+				return
+			}
+			songDifficulties := make([]ddr_models.SongDifficulty, 0)
+
+			doc.Find("li.step").Each(func(i int, s *goquery.Selection) {
+				img, exists := s.Find("img").Attr("src")
+				if exists {
+					imgExp := regexp.MustCompile(`songdetails_level_[0-9]*\.png`)
+					lvlExp := regexp.MustCompile("[^0-9]+")
+					s := imgExp.FindString(img)
+					s = lvlExp.ReplaceAllString(s, "")
+					v, err := strconv.ParseInt(s, 10, 8)
+					if err != nil {
+						v = -1
+					}
+					songDifficulties = append(songDifficulties, ddr_models.SongDifficulty{
+						SongId:          songId,
+						DifficultyId:    int8(i),
+						DifficultyValue: int8(v),
+					})
+				}
+			})
+			songMtx.Lock()
+			defer songMtx.Unlock()
+			*difficulties = append(*difficulties, songDifficulties...)
+		}(id, &difficultyList)
+	}
+
+	wg.Wait()
+
+	if errorCount > 0 {
+		return difficultyList, fmt.Errorf("encountered %d errors processing difficulties", errorCount)
+	}
+
+	return difficultyList, nil
 }

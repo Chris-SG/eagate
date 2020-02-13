@@ -1,17 +1,10 @@
 package ddr
 
 import (
-	"bytes"
 	"fmt"
-	"github.com/chris-sg/eagate_models/ddr_models"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"reflect"
-	"regexp"
-	"strconv"
-	"strings"
-	"sync"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
@@ -79,24 +72,13 @@ func PlayerInformation(client *http.Client) error {
 	return nil
 }
 
-// Score defines a score from DDR
-type Score struct {
-	Score      int `tag:"ハイスコア"`
-	Lamp       int8
-	PlayCount  int       `tag:"プレー回数"`
-	ClearCount int       `tag:"クリア回数"`
-	MaxCombo   int       `tag:"最大コンボ数"`
-	LastPlayed time.Time `tag:"最終プレー時間"`
-	Level      int8
-}
-
 //////////////////////
 // Score Info Block //
 //////////////////////
 
 // GetScoreInfo will process the provided song ids and retrieve all
 // player score information for these songs.
-func GetScoreInfo(client *http.Client, charts []ddr_models.SongDifficulty) ([]ddr_models.SongStatistics, error) {
+/*func GetScoreInfo(client *http.Client, charts []ddr_models.SongDifficulty) ([]ddr_models.SongStatistics, error) {
 	const musicDetail = "https://p.eagate.573.jp/game/ddr/ddra20/p/playdata/music_detail.html?index={id}&diff={diff}"
 
 	var songStatistics []ddr_models.SongStatistics
@@ -301,3 +283,4 @@ func RecentScores(client *http.Client) ([]RecentScore, error) {
 
 	return recentScores, nil
 }
+*/
