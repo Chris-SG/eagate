@@ -206,8 +206,9 @@ func SongDifficulties(client *http.Client, ids []string) ([]ddr_models.SongDiffi
 					}
 					songDifficulties = append(songDifficulties, ddr_models.SongDifficulty{
 						SongId:          songId,
-						DifficultyId:    int8(i),
-						DifficultyValue: int8(v),
+						Mode: ddr_models.Mode(i%2).String(),
+						Difficulty:    ddr_models.Difficulty(i%5).String(),
+						DifficultyValue: int16(v),
 					})
 				}
 			})

@@ -84,7 +84,10 @@ func SetStructValues(structType reflect.Type, structValue reflect.Value, data ma
 					}
 				case "time.Time":
 					format := "2006-01-02 15:04:05"
-					loc, _ := time.LoadLocation("JST")
+					loc, err := time.LoadLocation("Asia/Tokyo")
+					if err != nil {
+						fmt.Println(err)
+					}
 					t, err := time.ParseInLocation(format, val, loc)
 					if err == nil {
 						structValue.Elem().FieldByIndex([]int{i}).Set(reflect.ValueOf(t))
@@ -108,9 +111,9 @@ func TableThTd(selection *goquery.Selection) (map[string]string, error) {
 		for idx := 0; idx < tableValues.Length(); idx++ {
 			currSelection := tableValues.Eq(idx)
 			if currSelection.Is("th") {
-				th = currSelection.Text()
+				th = strings.TrimSpace(currSelection.Text())
 			} else if currSelection.Is("td") {
-				td = currSelection.Text()
+				td = strings.TrimSpace(currSelection.Text())
 				if th != "" && td != "" {
 					results[th] = td
 				}
