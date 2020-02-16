@@ -17,6 +17,15 @@ import (
 	"golang.org/x/text/transform"
 )
 
+func IsMaintenanceMode(client EaClient) bool {
+	doc, err := GetPageContentAsGoQuery(client.Client, "https://p.eagate.573.jp/game/")
+	if err != nil {
+		return true
+	}
+	html, _ := doc.Html()
+	return strings.Contains(html, "メンテナンス期間")
+}
+
 func CheckForUpdatedCookie(client EaClient) bool {
 	eagate, _ := url.Parse("https://p.eagate.573.jp")
 	currCookie := client.Client.Jar.Cookies(eagate)
