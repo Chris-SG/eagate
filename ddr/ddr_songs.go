@@ -21,13 +21,13 @@ var (
 )
 
 // SongIds retrieves all song ids
-func SongIds(client *http.Client) ([]string, error) {
+func SongIds(client util.EaClient) ([]string, error) {
 	const musicDataResource = "/game/ddr/ddra20/p/playdata/music_data_single.html?offset={page}&filter=0&filtertype=0&sorttype=0"
 	const baseDetail = "/game/ddr/ddra20/p/playdata/music_detail.html?index="
 
 	musicDataURI := util.BuildEaURI(musicDataResource)
 
-	totalPages, err := songPageCount(client)
+	totalPages, err := songPageCount(client.Client)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +44,7 @@ func SongIds(client *http.Client) ([]string, error) {
 			defer wg.Done()
 
 			currentPageURI := strings.Replace(musicDataURI, "{page}", strconv.Itoa(currPage), -1)
-			doc, err := util.GetPageContentAsGoQuery(client, currentPageURI)
+			doc, err := util.GetPageContentAsGoQuery(client.Client, currentPageURI)
 
 			if err != nil {
 				errorCount++
@@ -89,7 +89,7 @@ func songPageCount(client *http.Client) (int, error) {
 	return doc.Find("div#paging_box").First().Find("div.page_num").Length(), nil
 }
 
-func SongData(client *http.Client, songIds []string) ([]ddr_models.Song, error) {
+func SongData(client util.EaClient, songIds []string) ([]ddr_models.Song, error) {
 
 	var (
 		songMtx = &sync.Mutex{}
@@ -108,7 +108,7 @@ func SongData(client *http.Client, songIds []string) ([]ddr_models.Song, error) 
 	for _, id := range songIds {
 		go func(songId string, songList *[]ddr_models.Song) {
 			defer wg.Done()
-			doc, err := util.GetPageContentAsGoQuery(client, baseDetailURI + songId)
+			doc, err := util.GetPageContentAsGoQuery(client.Client, baseDetailURI + songId)
 			fmt.Printf("Starting song id %s\n", songId)
 
 			if err != nil {
@@ -130,7 +130,7 @@ func SongData(client *http.Client, songIds []string) ([]ddr_models.Song, error) 
 					imgPath, exists := img.First().Attr("src")
 					if exists {
 						imgUrl := fmt.Sprintf("https://p.eagate.573.jp%s", imgPath)
-						imgData, err := client.Get(imgUrl)
+						imgData, err := client.Client.Get(imgUrl)
 						if err != nil {
 							fmt.Println(err)
 							errorCount++
@@ -164,7 +164,7 @@ func SongData(client *http.Client, songIds []string) ([]ddr_models.Song, error) 
 
 // LoadSongDifficulties will lload allll the difficulty levels for
 // a provided song ID.
-func SongDifficulties(client *http.Client, ids []string) ([]ddr_models.SongDifficulty, error) {
+func SongDifficulties(client util.EaClient, ids []string) ([]ddr_models.SongDifficulty, error) {
 
 	var (
 		songMtx = &sync.Mutex{}
@@ -185,7 +185,7 @@ func SongDifficulties(client *http.Client, ids []string) ([]ddr_models.SongDiffi
 			defer wg.Done()
 			musicDiffDetails := strings.Replace(musicDetailUri, "{id}", songId, -1)
 
-			doc, err := util.GetPageContentAsGoQuery(client, musicDiffDetails)
+			doc, err := util.GetPageContentAsGoQuery(client.Client, musicDiffDetails)
 
 			if err != nil {
 				errorCount++

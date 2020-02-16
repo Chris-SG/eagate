@@ -85,7 +85,7 @@ func AddCookiesToJar(jar http.CookieJar, cookies []*http.Cookie) {
 // GetCookieFromEaGate will submit a request to login as the given
 // username with the provided password. This does not yet
 // support a OTP.
-func GetCookieFromEaGate(username string, password string, client *http.Client) (*http.Cookie, error) {
+func GetCookieFromEaGate(username string, password string, client util.EaClient) (*http.Cookie, error) {
 		const eagateLoginAuthResource = "/gate/p/common/login/api/login_auth.html"
 
 		eagateLoginAuthURI := util.BuildEaURI(eagateLoginAuthResource)
@@ -104,7 +104,7 @@ func GetCookieFromEaGate(username string, password string, client *http.Client) 
 		form.Add("captcha", captchaResult)
 
 		//res, err := http.NewRequest("POST", eagateLoginAuth, strings.NewReader(form.Encode()))
-		res, err := client.PostForm(eagateLoginAuthURI, form)
+		res, err := client.Client.PostForm(eagateLoginAuthURI, form)
 
 		if err != nil {
 			return nil, err
@@ -119,13 +119,16 @@ func GetCookieFromEaGate(username string, password string, client *http.Client) 
 	return cookies[0], nil
 }
 
-func CheckCookieEaGateAccess(client *http.Client, cookie *http.Cookie) error {
-	clientJar := client.Jar
+func CheckCookieEaGateAccess(client util.EaClient, cookie *http.Cookie) error {
+	if cookie == nil {
+		fmt.Errorf("no cookie found")
+	}
+	clientJar := client.Client.Jar
 	tempJar, _ := cookiejar.New(nil)
 	AddCookiesToJar(tempJar, []*http.Cookie{cookie})
-	client.Jar = tempJar
-	res, err := client.Get("https://p.eagate.573.jp/gate/p/mypage/index.html")
-	client.Jar = clientJar
+	client.Client.Jar = tempJar
+	res, err := client.Client.Get("https://p.eagate.573.jp/gate/p/mypage/index.html")
+	client.Client.Jar = clientJar
 	if err != nil || res.StatusCode != 200 {
 		return fmt.Errorf("cookie is no longer valid")
 	}
@@ -135,12 +138,12 @@ func CheckCookieEaGateAccess(client *http.Client, cookie *http.Cookie) error {
 // SolveCaptcha will load a Konami Captcha and attempt to solve it.
 // It returns a string containing the captcha session, a slice containing
 // all correct keys, and any errors encountered.
-func SolveCaptcha(client *http.Client) (string, string, error) {
+func SolveCaptcha(client util.EaClient) (string, string, error) {
 	const eagateCaptchaGenerateResource = "/gate/p/common/login/api/kcaptcha_generate.html"
 
 	eagateCaptchaGenerateURI := util.BuildEaURI(eagateCaptchaGenerateResource)
 
-	res, err := client.Get(eagateCaptchaGenerateURI)
+	res, err := client.Client.Get(eagateCaptchaGenerateURI)
 	if err != nil {
 		return "", "", err
 	}

@@ -7,9 +7,15 @@ import (
 	"net/http/cookiejar"
 )
 
+type EaClient struct {
+	Client *http.Client
+	Username string
+	ActiveCookie string
+}
+
 // GenerateClient will generate a http.client that is
 // used by this library.
-func GenerateClient() *http.Client {
+func GenerateClient() EaClient {
 	jar, _ := cookiejar.New(nil)
 
 	limiter := rate.NewLimiter(-1, -1)
@@ -24,7 +30,7 @@ func GenerateClient() *http.Client {
 			limiter,
 		},
 	}
-	return client
+	return EaClient{client, "", ""}
 }
 
 type ClientRateLimiter struct {

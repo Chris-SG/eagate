@@ -4,33 +4,28 @@ import (
 	"fmt"
 	"github.com/chris-sg/eagate/util"
 	"github.com/chris-sg/eagate_models/ddr_models"
-	"net/http"
 	"reflect"
+	"strconv"
+	"strings"
+	"sync"
 )
-
-func ddrGetLampMap() map[string]int8 {
-	return map[string]int8{
-		"Failed":      0,
-		"---":         1,
-		"グッドフルコンボ":    2,
-		"グレートフルコンボ":   3,
-		"パーフェクトフルコンボ": 4,
-	}
-}
 
 // PlayerInformation retrieves the base player
 // information using the provided cookie.
-func PlayerInformation(client *http.Client) (*ddr_models.PlayerDetails, error) {
+func PlayerInformation(client util.EaClient) (*ddr_models.PlayerDetails, *ddr_models.Playcount, error) {
 	const playerInformationResource = "/game/ddr/ddra20/p/playdata/index.html"
 
 	playerInformationURI := util.BuildEaURI(playerInformationResource)
-	doc, err := util.GetPageContentAsGoQuery(client, playerInformationURI)
+	doc, err := util.GetPageContentAsGoQuery(client.Client, playerInformationURI)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	pi := ddr_models.PlayerDetails{}
 	piType := reflect.TypeOf(pi)
+
+	pc := ddr_models.Playcount{}
+	pcType := reflect.TypeOf(pc)
 
 	//pi.Name = doc.Find("div#")
 
@@ -39,7 +34,7 @@ func PlayerInformation(client *http.Client) (*ddr_models.PlayerDetails, error) {
 	double := doc.Find("div#double").First()
 
 	if sougou == nil || single == nil || double == nil {
-		return nil, fmt.Errorf("unable to find all divs")
+		return nil, nil, fmt.Errorf("unable to find all divs")
 	}
 
 	sougouDetails, err := util.TableThTd(sougou.Find("table#status").First())
@@ -47,6 +42,7 @@ func PlayerInformation(client *http.Client) (*ddr_models.PlayerDetails, error) {
 		fmt.Println(err)
 	}
 	util.SetStructValues(piType, reflect.ValueOf(&pi), sougouDetails)
+	util.SetStructValues(pcType, reflect.ValueOf(&pc), sougouDetails)
 
 	fmt.Println(single.Html())
 
@@ -59,6 +55,7 @@ func PlayerInformation(client *http.Client) (*ddr_models.PlayerDetails, error) {
 		singleMap[k + "_single"] = v
 	}
 	util.SetStructValues(piType, reflect.ValueOf(&pi), singleMap)
+	util.SetStructValues(pcType, reflect.ValueOf(&pc), singleMap)
 
 	doubleDetails, err := util.TableThTd(double.Find("table.small_table").First())
 	if err != nil {
@@ -69,26 +66,73 @@ func PlayerInformation(client *http.Client) (*ddr_models.PlayerDetails, error) {
 		doubleMap[k + "_double"] = v
 	}
 	util.SetStructValues(piType, reflect.ValueOf(&pi), doubleMap)
+	util.SetStructValues(pcType, reflect.ValueOf(&pc), doubleMap)
 
-
-
-	/*doc.Find("div").Each(func(i int, s *goquery.Selection) {
-		id, exists := s.Attr("id")
-
-		if exists {
-			_, found := util.Find([]string{"sougou", "single", "double"}, id)
-			if found {
-				table := s.Find("table").First()
-				data, err := util.TableThTd(table)
-				if err != nil {
-					log.Fatal(err)
-				}
-				util.SetStructValues(piType, reflect.ValueOf(&pi), data)
-			}
-		}
-	})*/
+	fmt.Println(client.Username)
+	pi.EaGateUser = &client.Username
+	pc.PlayerCode = pi.Code
 
 	fmt.Println(pi)
+	fmt.Println(pc)
 
-	return &pi, nil
+	return &pi, &pc, nil
+}
+
+func SongStatistics(client util.EaClient, charts []ddr_models.SongDifficulty) ([]ddr_models.SongStatistics, error) {
+	var (
+		songMtx = &sync.Mutex{}
+		songStatistics = make([]ddr_models.SongStatistics, 0)
+	)
+
+	const musicDetailResource = "/game/ddr/ddra20/p/playdata/music_detail.html?index={id}&diff={diff}"
+
+	musicDetailUri := util.BuildEaURI(musicDetailResource)
+
+	wg := new(sync.WaitGroup)
+	wg.Add(len(charts))
+
+	errorCount := 0
+
+	for _, chart := range charts {
+		go func(diff ddr_models.SongDifficulty, songStats *[]ddr_models.SongStatistics) {
+			defer wg.Done()
+			chartDetails := strings.Replace(musicDetailUri, "{id}", diff.SongId, -1)
+			diffId := int(ddr_models.StringToDifficulty(diff.Difficulty)) + (5 * int(ddr_models.StringToMode(diff.Mode)))
+			chartDetails = strings.Replace(chartDetails, "{diff}", strconv.Itoa(diffId), -1)
+
+			doc, err := util.GetPageContentAsGoQuery(client.Client, chartDetails)
+			if err != nil {
+				errorCount++
+				return
+			}
+
+			if strings.Contains(doc.Find("div#popup_cnt").Text(), "NO PLAY") {
+				return
+			}
+
+			details, err := util.TableThTd(doc.Find("table#music_detail_table"))
+			if err != nil {
+				errorCount++
+				return
+			}
+
+			stat := ddr_models.SongStatistics{}
+			statType := reflect.TypeOf(stat)
+
+			util.SetStructValues(statType, reflect.ValueOf(&stat), details)
+			fmt.Println(stat)
+
+			songMtx.Lock()
+			defer songMtx.Unlock()
+			*songStats = append(*songStats, stat)
+		}(chart, &songStatistics)
+	}
+
+	wg.Wait()
+
+	if errorCount > 0 {
+		return songStatistics, fmt.Errorf("Failed getting score data for ")
+	}
+
+	return songStatistics, nil
 }
