@@ -2,12 +2,14 @@ package ddr
 
 import (
 	"fmt"
+	"github.com/PuerkitoBio/goquery"
 	"github.com/chris-sg/eagate/util"
 	"github.com/chris-sg/eagate_models/ddr_models"
 	"reflect"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 // PlayerInformation retrieves the base player
@@ -78,7 +80,7 @@ func PlayerInformation(client util.EaClient) (*ddr_models.PlayerDetails, *ddr_mo
 	return &pi, &pc, nil
 }
 
-func SongStatistics(client util.EaClient, charts []ddr_models.SongDifficulty) ([]ddr_models.SongStatistics, error) {
+func SongStatistics(client util.EaClient, charts []ddr_models.SongDifficulty, playerCode int) ([]ddr_models.SongStatistics, error) {
 	var (
 		songMtx = &sync.Mutex{}
 		songStatistics = make([]ddr_models.SongStatistics, 0)
@@ -120,7 +122,10 @@ func SongStatistics(client util.EaClient, charts []ddr_models.SongDifficulty) ([
 			statType := reflect.TypeOf(stat)
 
 			util.SetStructValues(statType, reflect.ValueOf(&stat), details)
-			fmt.Println(stat)
+			stat.SongId = diff.SongId
+			stat.Difficulty = diff.Difficulty
+			stat.Mode = diff.Mode
+			stat.PlayerCode = playerCode
 
 			songMtx.Lock()
 			defer songMtx.Unlock()
@@ -135,4 +140,73 @@ func SongStatistics(client util.EaClient, charts []ddr_models.SongDifficulty) ([
 	}
 
 	return songStatistics, nil
+}
+
+
+func RecentScores(client util.EaClient, playerCode int) (*[]ddr_models.Score, error) {
+	const recentSongsResource = "/game/ddr/ddra20/p/playdata/music_recent.html"
+	
+	recentSongsUri := util.BuildEaURI(recentSongsResource)
+	
+	recentScores := make([]ddr_models.Score, 0)
+
+	doc, err := util.GetPageContentAsGoQuery(client.Client, recentSongsUri)
+	if err != nil {
+		fmt.Print(err)
+		return nil, err
+	}
+
+	table := doc.Find("table#data_tbl")
+	if table.Length() == 0 {
+		return nil, fmt.Errorf("could not find data_tbl")
+	}
+
+
+	tableBody := table.First().Find("tbody").First()
+	if tableBody == nil {
+		return nil, fmt.Errorf("could not find table body")
+	}
+
+	tableBody.Find("tr").Each(func(i int, s *goquery.Selection) {
+		if s.Find("td").Length() > 0 {
+			var score ddr_models.Score
+			info := s.Find("a.music_info.cboxelement").First()
+			href, exists := info.Attr("href")
+			if exists {
+				difficulty, err := strconv.Atoi(href[len(href)-1:])
+				if err == nil {
+					score.Mode = ddr_models.Mode(difficulty % 2).String()
+					score.Difficulty = ddr_models.Difficulty(difficulty % 5).String()
+					score.SongId = href[strings.Index(href, "=")+1 : strings.Index(href, "&")]
+				}
+			}
+			score.Score, _ = strconv.Atoi(s.Find("td.score").First().Text())
+
+			format := "2006-01-02 15:04:05"
+			timeSelection := s.Find("td.date").First()
+
+			loc, err := time.LoadLocation("Asia/Tokyo")
+			t, err := time.ParseInLocation(format, timeSelection.Text(), loc)
+			if err == nil {
+				score.TimePlayed = t
+			}
+
+			rankSelection := s.Find("td.rank").First()
+			imgSelection := rankSelection.Find("img").First()
+			path, exists := imgSelection.Attr("src")
+			if exists {
+				score.ClearStatus = !strings.Contains(path, "rank_s_e")
+			}
+
+			score.PlayerCode = playerCode
+
+			recentScores = append(recentScores, score)
+		}
+	})
+
+	for _, score := range recentScores {
+		fmt.Println(score)
+	}
+
+	return &recentScores, nil
 }

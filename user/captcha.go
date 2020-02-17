@@ -120,7 +120,7 @@ func GetCookieFromEaGate(username string, password string, client util.EaClient)
 }
 
 func CheckCookieEaGateAccess(client util.EaClient, cookie *http.Cookie) error {
-	if cookie == nil {
+	if cookie == nil || cookie.String() == "" {
 		fmt.Errorf("no cookie found")
 	}
 	clientJar := client.Client.Jar
