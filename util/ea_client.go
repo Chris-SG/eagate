@@ -18,7 +18,7 @@ type EaClient struct {
 func GenerateClient() EaClient {
 	jar, _ := cookiejar.New(nil)
 
-	limiter := rate.NewLimiter(-1, -1)
+	limiter := rate.NewLimiter(100, 100)
 
 	client := &http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {

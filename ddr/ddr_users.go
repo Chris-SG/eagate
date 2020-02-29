@@ -175,7 +175,7 @@ func RecentScores(client util.EaClient, playerCode int) (*[]ddr_models.Score, er
 			if exists {
 				difficulty, err := strconv.Atoi(href[len(href)-1:])
 				if err == nil {
-					score.Mode = ddr_models.Mode(difficulty % 2).String()
+					score.Mode = ddr_models.Mode(difficulty / 5).String()
 					score.Difficulty = ddr_models.Difficulty(difficulty % 5).String()
 					score.SongId = href[strings.Index(href, "=")+1 : strings.Index(href, "&")]
 				}

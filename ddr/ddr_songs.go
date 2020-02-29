@@ -109,7 +109,6 @@ func SongData(client util.EaClient, songIds []string) ([]ddr_models.Song, error)
 		go func(songId string, songList *[]ddr_models.Song) {
 			defer wg.Done()
 			doc, err := util.GetPageContentAsGoQuery(client.Client, baseDetailURI + songId)
-			fmt.Printf("Starting song id %s\n", songId)
 
 			if err != nil {
 				errorCount++
@@ -144,8 +143,6 @@ func SongData(client util.EaClient, songIds []string) ([]ddr_models.Song, error)
 					}
 				}
 			})
-
-			fmt.Printf("%s - %s - %s\n", song.Id, song.Name, song.Artist)
 
 			songMtx.Lock()
 			defer songMtx.Unlock()

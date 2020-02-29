@@ -151,7 +151,6 @@ func GetPageContentAsGoQuery(client *http.Client, resource string) (*goquery.Doc
 		fmt.Println(err)
 		return nil, err
 	}
-
 	defer res.Body.Close()
 	body, err := ioutil.ReadAll(res.Body)
 
