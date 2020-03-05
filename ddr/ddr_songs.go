@@ -32,8 +32,6 @@ func SongIds(client util.EaClient) ([]string, error) {
 		return nil, err
 	}
 
-	fmt.Println(totalPages)
-
 	wg := new(sync.WaitGroup)
 	wg.Add(totalPages)
 

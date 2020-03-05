@@ -46,8 +46,6 @@ func PlayerInformation(client util.EaClient) (*ddr_models.PlayerDetails, *ddr_mo
 	util.SetStructValues(piType, reflect.ValueOf(&pi), sougouDetails)
 	util.SetStructValues(pcType, reflect.ValueOf(&pc), sougouDetails)
 
-	fmt.Println(single.Html())
-
 	singleDetails, err := util.TableThTd(single.Find("table.small_table").First())
 	if err != nil {
 		fmt.Println(err)
@@ -70,12 +68,8 @@ func PlayerInformation(client util.EaClient) (*ddr_models.PlayerDetails, *ddr_mo
 	util.SetStructValues(piType, reflect.ValueOf(&pi), doubleMap)
 	util.SetStructValues(pcType, reflect.ValueOf(&pc), doubleMap)
 
-	fmt.Println(client.Username)
 	pi.EaGateUser = &client.Username
 	pc.PlayerCode = pi.Code
-
-	fmt.Println(pi)
-	fmt.Println(pc)
 
 	return &pi, &pc, nil
 }
@@ -203,10 +197,6 @@ func RecentScores(client util.EaClient, playerCode int) (*[]ddr_models.Score, er
 			recentScores = append(recentScores, score)
 		}
 	})
-
-	for _, score := range recentScores {
-		fmt.Println(score)
-	}
 
 	return &recentScores, nil
 }

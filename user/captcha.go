@@ -125,12 +125,14 @@ func CheckCookieEaGateAccess(client util.EaClient, cookie *http.Cookie) error {
 	}
 	clientJar := client.Client.Jar
 	tempJar, _ := cookiejar.New(nil)
-	AddCookiesToJar(tempJar, []*http.Cookie{cookie})
+	cookies := []*http.Cookie{}
+	cookies = append(cookies, cookie)
+	AddCookiesToJar(tempJar, cookies)
 	client.Client.Jar = tempJar
 	res, err := client.Client.Get("https://p.eagate.573.jp/gate/p/mypage/index.html")
 	client.Client.Jar = clientJar
 	if err != nil || res.StatusCode != 200 {
-		return fmt.Errorf("cookie is no longer valid")
+		return fmt.Errorf("cookie is no longer valid, status was %d, cookie was %s.", res.StatusCode, cookie.String())
 	}
 	return nil
 }
