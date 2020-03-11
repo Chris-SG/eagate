@@ -6,6 +6,7 @@ import (
 	"github.com/chris-sg/eagate/util"
 	"github.com/chris-sg/eagate_models/ddr_models"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -199,4 +200,65 @@ func RecentScores(client util.EaClient, playerCode int) (*[]ddr_models.Score, er
 	})
 
 	return &recentScores, nil
+}
+
+func WorkoutData(client util.EaClient, playerCode int) ([]ddr_models.WorkoutData, error) {
+	const workoutResource = "/game/ddr/ddra20/p/playdata/workout.html"
+
+	workoutUri := util.BuildEaURI(workoutResource)
+
+	workoutData := make([]ddr_models.WorkoutData, 0)
+
+	doc, err := util.GetPageContentAsGoQuery(client.Client, workoutUri)
+	if err != nil {
+		return workoutData, err
+	}
+
+	table := doc.Find("table#work_out_left")
+	if table.Length() == 0 {
+		return workoutData, fmt.Errorf("could not find work_out_left")
+	}
+
+	tableBody := table.First().Find("tbody").First()
+	if tableBody == nil {
+		return workoutData, fmt.Errorf("could not find table body")
+	}
+
+	tableBody.Find("tr").Each(func(i int, s *goquery.Selection) {
+		if s.Find("td").Length() == 5 {
+			wd := ddr_models.WorkoutData{}
+			s.Find("td").Each(func(i int, dataSelection *goquery.Selection) {
+				if i == 1 {
+					format := "2006-01-02"
+
+					loc, err := time.LoadLocation("Asia/Tokyo")
+					t, err := time.ParseInLocation(format, dataSelection.Text(), loc)
+					if err == nil {
+						wd.Date = t
+					}
+				} else if i == 2 {
+					numerical, err := regexp.Compile("[^0-9]+")
+					if err != nil {
+						panic(err)
+					}
+					numericStr := numerical.ReplaceAllString(dataSelection.Text(), "")
+					wd.PlayCount, _ = strconv.Atoi(numericStr)
+				} else if i == 3 {
+					numerical, err := regexp.Compile("[^0-9.]+")
+					if err != nil {
+						panic(err)
+					}
+					numericStr := numerical.ReplaceAllString(dataSelection.Text(), "")
+					kcalFloat, err := strconv.ParseFloat(numericStr, 32)
+					if err == nil {
+						wd.Kcal = float32(kcalFloat)
+					}
+				}
+			})
+			wd.PlayerCode = playerCode
+			workoutData = append(workoutData, wd)
+		}
+	})
+
+	return workoutData, nil
 }
