@@ -8,7 +8,6 @@ import (
 	"github.com/chris-sg/eagate/util"
 	"io/ioutil"
 	"net/http"
-	"net/http/cookiejar"
 	"net/url"
 	"regexp"
 )
@@ -75,66 +74,40 @@ func getChecksums() map[string]string {
 	}
 }
 
-// AddCookiesToJar will add a slice of cookies to the
-// provided jar under the eagate URL
-func AddCookiesToJar(jar http.CookieJar, cookies []*http.Cookie) {
-	eagate, _ := url.Parse("https://p.eagate.573.jp")
-	jar.SetCookies(eagate, cookies)
-}
-
 // GetCookieFromEaGate will submit a request to login as the given
 // username with the provided password. This does not yet
 // support a OTP.
 func GetCookieFromEaGate(username string, password string, client util.EaClient) (*http.Cookie, error) {
-		const eagateLoginAuthResource = "/gate/p/common/login/api/login_auth.html"
+	const eagateLoginAuthResource = "/gate/p/common/login/api/login_auth.html"
 
-		eagateLoginAuthURI := util.BuildEaURI(eagateLoginAuthResource)
+	eagateLoginAuthURI := util.BuildEaURI(eagateLoginAuthResource)
 
-		session, correct, err := SolveCaptcha(client)
+	session, correct, err := SolveCaptcha(client)
 
-		if err != nil {
-			return nil, err
-		}
+	if err != nil {
+		return nil, err
+	}
 
-		form := url.Values{}
+	form := url.Values{}
 
-		captchaResult := "k_" + session + correct
-		form.Add("login_id", username)
-		form.Add("pass_word", password)
-		form.Add("captcha", captchaResult)
+	captchaResult := "k_" + session + correct
+	form.Add("login_id", username)
+	form.Add("pass_word", password)
+	form.Add("captcha", captchaResult)
 
-		//res, err := http.NewRequest("POST", eagateLoginAuth, strings.NewReader(form.Encode()))
-		res, err := client.Client.PostForm(eagateLoginAuthURI, form)
+	res, err := client.Client.PostForm(eagateLoginAuthURI, form)
 
-		if err != nil {
-			return nil, err
-		}
+	if err != nil {
+		return nil, err
+	}
 
-		cookies := res.Cookies()
+	cookies := res.Cookies()
 
-		if len(cookies) == 0 {
-			return nil, fmt.Errorf("could not generate cookie")
-		}
+	if len(cookies) == 0 {
+		return nil, fmt.Errorf("could not generate cookie")
+	}
 
 	return cookies[0], nil
-}
-
-func CheckCookieEaGateAccess(client util.EaClient, cookie *http.Cookie) error {
-	if cookie == nil || cookie.String() == "" {
-		fmt.Errorf("no cookie found")
-	}
-	clientJar := client.Client.Jar
-	tempJar, _ := cookiejar.New(nil)
-	cookies := []*http.Cookie{}
-	cookies = append(cookies, cookie)
-	AddCookiesToJar(tempJar, cookies)
-	client.Client.Jar = tempJar
-	res, err := client.Client.Get("https://p.eagate.573.jp/gate/p/mypage/index.html")
-	client.Client.Jar = clientJar
-	if err != nil || res.StatusCode != 200 {
-		return fmt.Errorf("cookie is no longer valid, status was %d, cookie was %s.", res.StatusCode, cookie.String())
-	}
-	return nil
 }
 
 // SolveCaptcha will load a Konami Captcha and attempt to solve it.
@@ -239,3 +212,9 @@ func FindMD5(md5 string) (string, error) {
 
 	return "unknown", errors.New("failed to locate captcha type")
 }
+
+/*func GetEamusementSubscriptionStatus(client util.EaClient) (status string, err error) {
+	const paybookResource = "/payment/mybook/paybook.html"
+
+	paybookUri := util.BuildEaURI(paybookResource)
+}*/

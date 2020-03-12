@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"net/url"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -24,24 +23,6 @@ func IsMaintenanceMode(client EaClient) bool {
 	}
 	html, _ := doc.Html()
 	return strings.Contains(html, "メンテナンス期間")
-}
-
-func CheckForUpdatedCookie(client EaClient) bool {
-	eagate, _ := url.Parse("https://p.eagate.573.jp")
-	currCookie := client.Client.Jar.Cookies(eagate)
-	if len(currCookie) == 0 || currCookie[0].String() == client.ActiveCookie {
-		return false
-	}
-	return true
-}
-
-func GetCurrentCookie(client EaClient) *http.Cookie {
-	eagate, _ := url.Parse("https://p.eagate.573.jp")
-	currCookie := client.Client.Jar.Cookies(eagate)
-	if len(currCookie) == 0 {
-		return nil
-	}
-	return currCookie[0]
 }
 
 // Find will locate the existence of a given value in a slice.

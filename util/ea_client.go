@@ -1,10 +1,14 @@
 package util
 
 import (
+	"bufio"
 	"context"
+	"fmt"
 	"golang.org/x/sync/semaphore"
 	"net/http"
 	"net/http/cookiejar"
+	"net/url"
+	"strings"
 )
 
 type EaClient struct {
@@ -48,4 +52,44 @@ func (crl ClientRateLimiter) RoundTrip(req *http.Request) (*http.Response, error
 	crl.WeightedSemaphore.Acquire(context.Background(), 1)
 	defer crl.WeightedSemaphore.Release(1)
 	return crl.Proxy.RoundTrip(req)
+}
+
+func (client EaClient) SetEaCookie(cookie *http.Cookie) {
+	eagate, _ := url.Parse("https://p.eagate.573.jp")
+	client.Client.Jar.SetCookies(eagate, []*http.Cookie{cookie})
+	client.ActiveCookie = cookie.String()
+}
+
+
+func (client EaClient) GetEaCookie() *http.Cookie {
+	eagate, _ := url.Parse("https://p.eagate.573.jp")
+	currCookie := client.Client.Jar.Cookies(eagate)
+	if len(currCookie) == 0 {
+		return nil
+	}
+	return currCookie[0]
+}
+
+func (client EaClient) LoginState() bool {
+	res, err := client.Client.Get("https://p.eagate.573.jp/gate/p/mypage/index.html")
+	if err != nil || res.StatusCode != 200 {
+		fmt.Println(err)
+		fmt.Println(res)
+		return false
+	}
+
+	currCookie := client.GetEaCookie()
+	if currCookie != nil && currCookie.String() != client.ActiveCookie {
+		client.SetEaCookie(currCookie)
+	}
+	return true
+}
+
+func CookieFromRawCookie(rawCookie string) *http.Cookie {
+	rawReq := fmt.Sprintf("GET / HTTP/1.0\r\nCookie: %s\r\n\r\n", rawCookie)
+	req, err := http.ReadRequest(bufio.NewReader(strings.NewReader(rawReq)))
+	if err != nil {
+		return nil
+	}
+	return req.Cookies()[0]
 }
