@@ -66,6 +66,7 @@ func (client EaClient) SetEaCookie(cookie *http.Cookie) {
 	eagate, _ := url.Parse("https://p.eagate.573.jp")
 	client.Client.Jar.SetCookies(eagate, []*http.Cookie{cookie})
 	client.ActiveCookie = cookie.String()
+	fmt.Println(cookie)
 }
 
 
