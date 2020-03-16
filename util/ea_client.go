@@ -13,7 +13,7 @@ import (
 
 type EaClient struct {
 	Client *http.Client
-	Username string
+	username string
 	ActiveCookie string
 }
 
@@ -52,6 +52,14 @@ func (crl ClientRateLimiter) RoundTrip(req *http.Request) (*http.Response, error
 	crl.WeightedSemaphore.Acquire(context.Background(), 1)
 	defer crl.WeightedSemaphore.Release(1)
 	return crl.Proxy.RoundTrip(req)
+}
+
+func (client EaClient) SetUsername(un string) {
+	client.username = strings.ToLower(un)
+}
+
+func (client EaClient) GetUsername() string {
+	return client.username;
 }
 
 func (client EaClient) SetEaCookie(cookie *http.Cookie) {

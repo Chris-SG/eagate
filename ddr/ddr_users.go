@@ -69,7 +69,8 @@ func PlayerInformation(client util.EaClient) (*ddr_models.PlayerDetails, *ddr_mo
 	util.SetStructValues(piType, reflect.ValueOf(&pi), doubleMap)
 	util.SetStructValues(pcType, reflect.ValueOf(&pc), doubleMap)
 
-	pi.EaGateUser = &client.Username
+	eagateUser := client.GetUsername()
+	pi.EaGateUser = &eagateUser
 	pc.PlayerCode = pi.Code
 
 	return &pi, &pc, nil
