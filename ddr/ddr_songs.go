@@ -129,7 +129,6 @@ func SongData(client util.EaClient, songIds []string) ([]ddr_models.Song, error)
 						imgUrl := fmt.Sprintf("https://p.eagate.573.jp%s", imgPath)
 						imgData, err := client.Client.Get(imgUrl)
 						if err != nil {
-							fmt.Println(err)
 							errorCount++
 						} else {
 							body, err := ioutil.ReadAll(imgData.Body)

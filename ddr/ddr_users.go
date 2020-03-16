@@ -42,14 +42,14 @@ func PlayerInformation(client util.EaClient) (*ddr_models.PlayerDetails, *ddr_mo
 
 	sougouDetails, err := util.TableThTd(sougou.Find("table#status").First())
 	if err != nil {
-		fmt.Println(err)
+		return nil, nil, err
 	}
 	util.SetStructValues(piType, reflect.ValueOf(&pi), sougouDetails)
 	util.SetStructValues(pcType, reflect.ValueOf(&pc), sougouDetails)
 
 	singleDetails, err := util.TableThTd(single.Find("table.small_table").First())
 	if err != nil {
-		fmt.Println(err)
+		return nil, nil, err
 	}
 	singleMap := make(map[string]string)
 	for k, v := range singleDetails {
@@ -60,7 +60,7 @@ func PlayerInformation(client util.EaClient) (*ddr_models.PlayerDetails, *ddr_mo
 
 	doubleDetails, err := util.TableThTd(double.Find("table.small_table").First())
 	if err != nil {
-		fmt.Println(err)
+		return nil, nil, err
 	}
 	doubleMap := make(map[string]string)
 	for k, v := range doubleDetails {
@@ -148,7 +148,6 @@ func RecentScores(client util.EaClient, playerCode int) (*[]ddr_models.Score, er
 
 	doc, err := util.GetPageContentAsGoQuery(client.Client, recentSongsUri)
 	if err != nil {
-		fmt.Print(err)
 		return nil, err
 	}
 

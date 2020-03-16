@@ -168,12 +168,12 @@ func SolveCaptcha(client util.EaClient) (string, string, error) {
 	for _, element := range choiceImages {
 		captchaString += "_"
 		character, err := FindMD5(element.md5)
-		if err != nil {
-			fmt.Println(err)
-		} else if character == correctCharacter {
+		if character == correctCharacter {
 			captchaString += element.key
 		} else if character == "unknown" {
 			fmt.Printf("%s %s %s", element.key, element.md5, character)
+		} else {
+			fmt.Println(err)
 		}
 	}
 

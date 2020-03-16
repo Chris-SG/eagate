@@ -1,7 +1,6 @@
 package util
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"golang.org/x/sync/semaphore"
@@ -56,17 +55,18 @@ func (crl ClientRateLimiter) RoundTrip(req *http.Request) (*http.Response, error
 
 func (client EaClient) SetUsername(un string) {
 	client.username = strings.ToLower(un)
+	fmt.Printf("is now %s as per %s", client.username, strings.ToLower(un))
 }
 
 func (client EaClient) GetUsername() string {
-	return client.username;
+	return client.username
 }
 
 func (client EaClient) SetEaCookie(cookie *http.Cookie) {
 	eagate, _ := url.Parse("https://p.eagate.573.jp")
+	cookie.Domain = eagate.Host
 	client.Client.Jar.SetCookies(eagate, []*http.Cookie{cookie})
 	client.ActiveCookie = cookie.String()
-	fmt.Println(cookie)
 }
 
 
@@ -82,8 +82,6 @@ func (client EaClient) GetEaCookie() *http.Cookie {
 func (client EaClient) LoginState() bool {
 	res, err := client.Client.Get("https://p.eagate.573.jp/gate/p/mypage/index.html")
 	if err != nil || res.StatusCode != 200 {
-		fmt.Println(err)
-		fmt.Println(res)
 		return false
 	}
 
@@ -95,10 +93,8 @@ func (client EaClient) LoginState() bool {
 }
 
 func CookieFromRawCookie(rawCookie string) *http.Cookie {
-	rawReq := fmt.Sprintf("GET / HTTP/1.0\r\nCookie: %s\r\n\r\n", rawCookie)
-	req, err := http.ReadRequest(bufio.NewReader(strings.NewReader(rawReq)))
-	if err != nil {
-		return nil
-	}
-	return req.Cookies()[0]
+	header := http.Header{}
+	header.Add("Cookie", rawCookie)
+	request := http.Request{Header: header}
+	return request.Cookies()[0]
 }

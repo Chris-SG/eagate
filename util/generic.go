@@ -75,14 +75,12 @@ func SetStructValues(structType reflect.Type, structValue reflect.Value, data ma
 					val, err := strconv.Atoi(reg.ReplaceAllString(val, ""))
 					if err == nil {
 						structValue.Elem().FieldByIndex([]int{i}).SetInt(int64(val))
-					} else {
-						fmt.Printf("Warning: Failed to set int value for %s\n", structType.Field(i).Name)
 					}
 				case "time.Time":
 					format := "2006-01-02 15:04:05"
 					loc, err := time.LoadLocation("Asia/Tokyo")
 					if err != nil {
-						fmt.Println(err)
+						continue
 					}
 					t, err := time.ParseInLocation(format, val, loc)
 					if err == nil {
@@ -129,7 +127,6 @@ func GetPageContentAsGoQuery(client *http.Client, resource string) (*goquery.Doc
 	res, err := client.Get(resource)
 
 	if err != nil {
-		fmt.Println(err)
 		return nil, err
 	}
 	defer res.Body.Close()
