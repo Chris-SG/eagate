@@ -2,6 +2,7 @@ package util
 
 import (
 	"context"
+	"github.com/golang/glog"
 	"golang.org/x/net/http/httpguts"
 	"golang.org/x/sync/semaphore"
 	"net/http"
@@ -24,8 +25,8 @@ var (
 // GenerateClient will generate a http.client that is
 // used by this library.
 func GenerateClient() EaClient {
+	glog.Infoln("generating new eaclient")
 	jar := NewJar()
-	//jar, _ := cookiejar.New(nil)
 
 	if s == nil {
 		s = semaphore.NewWeighted(1024)
@@ -57,6 +58,7 @@ func (crl ClientRateLimiter) RoundTrip(req *http.Request) (*http.Response, error
 
 func (client *EaClient) SetUsername(un string) {
 	client.username = strings.ToLower(un)
+	glog.Infof("client username changed to %s\n", client.username)
 }
 
 func (client *EaClient) GetUsername() string {
@@ -71,6 +73,7 @@ func (client *EaClient) SetEaCookie(cookie *http.Cookie) {
 
 	client.Client.Jar.SetCookies(eagate, cookies)
 	client.ActiveCookie = cookie.String()
+	glog.Infof("eacookie changed for username %s\n", client.username)
 }
 
 
@@ -86,13 +89,16 @@ func (client *EaClient) GetEaCookie() *http.Cookie {
 func (client *EaClient) LoginState() bool {
 	res, err := client.Client.Get("https://p.eagate.573.jp/gate/p/mypage/index.html")
 	if err != nil || res.StatusCode != 200 {
+		glog.Warningf("loginstate for %s is false, status %d\n", client.username, res.StatusCode)
 		return false
 	}
 
 	currCookie := client.GetEaCookie()
 	if currCookie != nil && currCookie.String() != client.ActiveCookie {
+		glog.Infof("cookie for user %s changed\n", client.username)
 		client.SetEaCookie(currCookie)
 	}
+	glog.Infof("cookie set for user %s\n", client.username)
 	return true
 }
 
@@ -103,11 +109,14 @@ func CookieFromRawCookie(rawCookie string) *http.Cookie {
 func parseRawCookie(rawCookie string) *http.Cookie {
 	parts := strings.Split(strings.TrimSpace(rawCookie), ";")
 	if len(parts) == 1 && parts[0] == "" {
+		glog.Errorln("attempted to parse empty rawCookie")
 		return nil
 	}
+	glog.Infof("parsing raw cookie %s", rawCookie[0:9])
 	parts[0] = strings.TrimSpace(parts[0])
 	j := strings.Index(parts[0], "=")
 	if j < 0 {
+		glog.Errorf("raw cookie %s does not contain '='\n", rawCookie[0:9])
 		return nil
 	}
 	name, value := parts[0][:j], parts[0][j+1:]
@@ -116,6 +125,7 @@ func parseRawCookie(rawCookie string) *http.Cookie {
 	}
 	value, ok := parseCookieValue(value, true)
 	if !ok {
+		glog.Errorf("failed to parsecookievalue on %s\n", rawCookie[0:9])
 		return nil
 	}
 	c := &http.Cookie{
@@ -178,6 +188,7 @@ func parseRawCookie(rawCookie string) *http.Cookie {
 			if err != nil {
 				exptime, err = time.Parse("Mon, 02-Jan-2006 15:04:05 MST", val)
 				if err != nil {
+					glog.Warningf("parsing time on %s failed: %d\n", rawCookie[0:9], val)
 					c.Expires = time.Time{}
 					break
 				}

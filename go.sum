@@ -9,6 +9,8 @@ github.com/chris-sg/eagate_models v0.0.0-20200311005935-7d24d43473b0/go.mod h1:4
 github.com/chris-sg/eagate_models v0.0.0-20200311061327-0b25012d3ff9 h1:IVVU+TABTbCydr5rZ400IKKaBduTq9QvTEpcxhMIi+I=
 github.com/chris-sg/eagate_models v0.0.0-20200311061327-0b25012d3ff9/go.mod h1:4KbN1UqlmA6tSV7FETgmHHOiWs+WBU3xzf40xbosCjM=
 github.com/go-sql-driver/mysql v1.4.0/go.mod h1:zAC/RDZ24gD3HViQzih4MyKcchzm+sOG5ZlKdlhCg5w=
+github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b h1:VKtxabqXZkF25pY9ekfRL6a582T4P37/31XEstQ5p58=
+github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b/go.mod h1:SBH7ygxi8pfUlaOkMMuAQtPIUF8ecWP5IEl/CR7VP2Q=
 github.com/jmoiron/sqlx v1.2.0 h1:41Ip0zITnmWNR/vHV+S4m+VoUivnWY5E4OJfLZjCJMA=
 github.com/jmoiron/sqlx v1.2.0/go.mod h1:1FEQNm3xlJgrMD+FBdI9+xvCksHtbpVBBw5dYhBSsks=
 github.com/jmoiron/sqlx v1.2.1-0.20191203222853-2ba0fc60eb4a h1:lFdq2R2hQMsOxn5o17mEN0/RCbCCmcXoTiLh+wtfQSs=

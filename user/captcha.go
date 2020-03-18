@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/chris-sg/eagate/util"
+	"github.com/golang/glog"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -78,6 +79,7 @@ func getChecksums() map[string]string {
 // username with the provided password. This does not yet
 // support a OTP.
 func GetCookieFromEaGate(username string, password string, client util.EaClient) (*http.Cookie, error) {
+	glog.Infof("attempting to login user %s", username)
 	const eagateLoginAuthResource = "/gate/p/common/login/api/login_auth.html"
 
 	eagateLoginAuthURI := util.BuildEaURI(eagateLoginAuthResource)
@@ -85,6 +87,7 @@ func GetCookieFromEaGate(username string, password string, client util.EaClient)
 	session, correct, err := SolveCaptcha(client)
 
 	if err != nil {
+		glog.Errorf("user %s failed captcha: %s", username, err.Error())
 		return nil, err
 	}
 
@@ -98,12 +101,14 @@ func GetCookieFromEaGate(username string, password string, client util.EaClient)
 	res, err := client.Client.PostForm(eagateLoginAuthURI, form)
 
 	if err != nil {
+		glog.Warningf("user %s failed login: %s", username, err.Error())
 		return nil, err
 	}
 
 	cookies := res.Cookies()
 
 	if len(cookies) == 0 {
+		glog.Errorf("cookie was not generated for user %s", username)
 		return nil, fmt.Errorf("could not generate cookie")
 	}
 
@@ -114,18 +119,21 @@ func GetCookieFromEaGate(username string, password string, client util.EaClient)
 // It returns a string containing the captcha session, a slice containing
 // all correct keys, and any errors encountered.
 func SolveCaptcha(client util.EaClient) (string, string, error) {
+	glog.Infof("solving captcha for user %s", client.GetUsername())
 	const eagateCaptchaGenerateResource = "/gate/p/common/login/api/kcaptcha_generate.html"
 
 	eagateCaptchaGenerateURI := util.BuildEaURI(eagateCaptchaGenerateResource)
 
 	res, err := client.Client.Get(eagateCaptchaGenerateURI)
 	if err != nil {
+		glog.Errorf("user %s failed captcha: %s", client.GetUsername(), err.Error())
 		return "", "", err
 	}
 
 	defer res.Body.Close()
 	body, err := ioutil.ReadAll(res.Body)
 	if err != nil {
+		glog.Errorf("user %s failed captcha: %s", client.GetUsername(), err.Error())
 		return "", "", err
 	}
 
@@ -133,11 +141,13 @@ func SolveCaptcha(client util.EaClient) (string, string, error) {
 
 	err = json.Unmarshal([]byte(body), &captchaData)
 	if err != nil {
+		glog.Errorf("user %s failed captcha: %s", client.GetUsername(), err.Error())
 		return "", "", err
 	}
 
 	correctPicMD5, err := LoadMD5OfImageURI(captchaData.Data.CorrectPic)
 	if err != nil {
+		glog.Errorf("user %s failed captcha: %s", client.GetUsername(), err.Error())
 		return "", "", err
 	}
 
@@ -146,6 +156,7 @@ func SolveCaptcha(client util.EaClient) (string, string, error) {
 		re := regexp.MustCompile("[A-Fa-f0-9]{32}")
 		match := re.FindStringSubmatch(captchaData.Data.CorrectPic)
 
+		glog.Errorf("captcha failed due to missing character key %s with md5 %s", match[0], correctPicMD5)
 		return "", "", fmt.Errorf("character key %s md5 %s was not found", match[0], correctPicMD5)
 	}
 
@@ -171,8 +182,9 @@ func SolveCaptcha(client util.EaClient) (string, string, error) {
 		if character == correctCharacter {
 			captchaString += element.key
 		} else if character == "unknown" {
-			fmt.Printf("%s %s %s", element.key, element.md5, character)
+			glog.Errorf("missing captcha character, key %s md5 %s character %s", element.key, element.md5, character)
 		} else {
+			glog.Errorf("captcha error: %s", err.Error())
 			fmt.Println(err)
 		}
 	}
@@ -187,6 +199,7 @@ func LoadMD5OfImageURI(uri string) (string, error) {
 	image, err := http.Get(uri)
 
 	if err != nil {
+		glog.Errorf("failed to load %s: %s", uri, err.Error())
 		return "", err
 	}
 
@@ -194,6 +207,7 @@ func LoadMD5OfImageURI(uri string) (string, error) {
 	imageData, err := ioutil.ReadAll(image.Body)
 
 	if err != nil {
+		glog.Errorf("failed to load %s: %s", uri, err.Error())
 		return "", err
 	}
 

@@ -3,6 +3,7 @@ package util
 import (
 	"bytes"
 	"fmt"
+	"github.com/golang/glog"
 	"io/ioutil"
 	"net/http"
 	"reflect"
@@ -17,8 +18,10 @@ import (
 )
 
 func IsMaintenanceMode(client EaClient) bool {
+	glog.Infof("checking maintenancemode for user %s\n", client.GetUsername())
 	doc, err := GetPageContentAsGoQuery(client.Client, "https://p.eagate.573.jp/game/")
 	if err != nil {
+		glog.Warningf("failed to get page content for maintenancemode: %s\n", err.Error())
 		return true
 	}
 	html, _ := doc.Html()
@@ -80,6 +83,7 @@ func SetStructValues(structType reflect.Type, structValue reflect.Value, data ma
 					format := "2006-01-02 15:04:05"
 					loc, err := time.LoadLocation("Asia/Tokyo")
 					if err != nil {
+						glog.Warningln("failed to load timezone location")
 						continue
 					}
 					t, err := time.ParseInLocation(format, val, loc)
@@ -87,7 +91,7 @@ func SetStructValues(structType reflect.Type, structValue reflect.Value, data ma
 						structValue.Elem().FieldByIndex([]int{i}).Set(reflect.ValueOf(t))
 					}
 				default:
-					fmt.Printf("unhandled type %s", structType.Field(i).Type.String())
+					glog.Warningf("attempted to set struct for unhandled type %s\n", structType.Field(i).Type.String())
 				}
 			}
 		}
@@ -120,13 +124,16 @@ func TableThTd(selection *goquery.Selection) (map[string]string, error) {
 		}
 		return results, nil
 	}
+	glog.Warningln("attempted table selection on type that is not table")
 	return make(map[string]string), fmt.Errorf("query selection is not of type table")
 }
 
 func GetPageContentAsGoQuery(client *http.Client, resource string) (*goquery.Document, error) {
+	glog.Infof("retrieving resource %s\n", resource)
 	res, err := client.Get(resource)
 
 	if err != nil {
+		glog.Errorf("failed to get resource %s: %s\n", resource, err.Error())
 		return nil, err
 	}
 	defer res.Body.Close()

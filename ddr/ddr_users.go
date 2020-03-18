@@ -5,6 +5,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/chris-sg/eagate/util"
 	"github.com/chris-sg/eagate_models/ddr_models"
+	"github.com/golang/glog"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -16,11 +17,13 @@ import (
 // PlayerInformation retrieves the base player
 // information using the provided cookie.
 func PlayerInformation(client util.EaClient) (*ddr_models.PlayerDetails, *ddr_models.Playcount, error) {
+	glog.Infof("loading playerinformation for user %s\n", client.GetUsername())
 	const playerInformationResource = "/game/ddr/ddra20/p/playdata/index.html"
 
 	playerInformationURI := util.BuildEaURI(playerInformationResource)
 	doc, err := util.GetPageContentAsGoQuery(client.Client, playerInformationURI)
 	if err != nil {
+		glog.Errorf("failed to load playerinformation resource for user %s: %s\n", client.GetUsername(), err.Error())
 		return nil, nil, err
 	}
 
@@ -30,18 +33,18 @@ func PlayerInformation(client util.EaClient) (*ddr_models.PlayerDetails, *ddr_mo
 	pc := ddr_models.Playcount{}
 	pcType := reflect.TypeOf(pc)
 
-	//pi.Name = doc.Find("div#")
-
 	sougou := doc.Find("div#sougou").First()
 	single := doc.Find("div#single").First()
 	double := doc.Find("div#double").First()
 
 	if sougou == nil || single == nil || double == nil {
+		glog.Errorf("failed to load playerinformation resource for user %s: failed to load all divs\n", client.GetUsername())
 		return nil, nil, fmt.Errorf("unable to find all divs")
 	}
 
 	sougouDetails, err := util.TableThTd(sougou.Find("table#status").First())
 	if err != nil {
+		glog.Errorf("failed to load playerinformation resource for user %s: %s\n", client.GetUsername(), err.Error())
 		return nil, nil, err
 	}
 	util.SetStructValues(piType, reflect.ValueOf(&pi), sougouDetails)
@@ -49,6 +52,7 @@ func PlayerInformation(client util.EaClient) (*ddr_models.PlayerDetails, *ddr_mo
 
 	singleDetails, err := util.TableThTd(single.Find("table.small_table").First())
 	if err != nil {
+		glog.Errorf("failed to load playerinformation resource for user %s: %s\n", client.GetUsername(), err.Error())
 		return nil, nil, err
 	}
 	singleMap := make(map[string]string)
@@ -60,6 +64,7 @@ func PlayerInformation(client util.EaClient) (*ddr_models.PlayerDetails, *ddr_mo
 
 	doubleDetails, err := util.TableThTd(double.Find("table.small_table").First())
 	if err != nil {
+		glog.Errorf("failed to load playerinformation resource for user %s: %s\n", client.GetUsername(), err.Error())
 		return nil, nil, err
 	}
 	doubleMap := make(map[string]string)
@@ -73,10 +78,12 @@ func PlayerInformation(client util.EaClient) (*ddr_models.PlayerDetails, *ddr_mo
 	pi.EaGateUser = &eagateUser
 	pc.PlayerCode = pi.Code
 
+	glog.Infof("loaded playerinformation for %s, dancer code %d, playcount %d\n", eagateUser, pi.Code, pc.Playcount)
 	return &pi, &pc, nil
 }
 
 func SongStatistics(client util.EaClient, charts []ddr_models.SongDifficulty, playerCode int) ([]ddr_models.SongStatistics, error) {
+	glog.Infof("loading songstatistics for user %s (%d charts)\n", client.GetUsername(), len(charts))
 	var (
 		songMtx = &sync.Mutex{}
 		songStatistics = make([]ddr_models.SongStatistics, 0)
@@ -100,6 +107,7 @@ func SongStatistics(client util.EaClient, charts []ddr_models.SongDifficulty, pl
 
 			doc, err := util.GetPageContentAsGoQuery(client.Client, chartDetails)
 			if err != nil {
+				glog.Errorf("failed loading song statistic for %s: %s\n", client.GetUsername(), err.Error())
 				errorCount++
 				return
 			}
@@ -110,6 +118,7 @@ func SongStatistics(client util.EaClient, charts []ddr_models.SongDifficulty, pl
 
 			details, err := util.TableThTd(doc.Find("table#music_detail_table"))
 			if err != nil {
+				glog.Errorf("failed loading song statistic for %s: %s\n", client.GetUsername(), err.Error())
 				errorCount++
 				return
 			}
@@ -132,14 +141,17 @@ func SongStatistics(client util.EaClient, charts []ddr_models.SongDifficulty, pl
 	wg.Wait()
 
 	if errorCount > 0 {
+		glog.Errorf("failed loading song statistic for %s due to %d errors\n", client.GetUsername(), errorCount)
 		return songStatistics, fmt.Errorf("Failed getting score data for ")
 	}
 
+	glog.Infof("got %d statistics for user %s\n", len(songStatistics), client.GetUsername())
 	return songStatistics, nil
 }
 
 
 func RecentScores(client util.EaClient, playerCode int) (*[]ddr_models.Score, error) {
+	glog.Infof("loading recentscores for user %s (playercode %d)\n", client.GetUsername(), playerCode)
 	const recentSongsResource = "/game/ddr/ddra20/p/playdata/music_recent.html"
 	
 	recentSongsUri := util.BuildEaURI(recentSongsResource)
@@ -148,17 +160,20 @@ func RecentScores(client util.EaClient, playerCode int) (*[]ddr_models.Score, er
 
 	doc, err := util.GetPageContentAsGoQuery(client.Client, recentSongsUri)
 	if err != nil {
+		glog.Errorf("failed recentscores for %s: %s\n", client.GetUsername(), err.Error())
 		return nil, err
 	}
 
 	table := doc.Find("table#data_tbl")
 	if table.Length() == 0 {
+		glog.Errorf("failed recentscores for %s: could not find data_tbl\n", client.GetUsername())
 		return nil, fmt.Errorf("could not find data_tbl")
 	}
 
 
 	tableBody := table.First().Find("tbody").First()
 	if tableBody == nil {
+		glog.Errorf("failed recentscores for %s: could not find table body\n", client.GetUsername())
 		return nil, fmt.Errorf("could not find table body")
 	}
 
@@ -173,6 +188,8 @@ func RecentScores(client util.EaClient, playerCode int) (*[]ddr_models.Score, er
 					score.Mode = ddr_models.Mode(difficulty / 5).String()
 					score.Difficulty = ddr_models.Difficulty(difficulty % 5).String()
 					score.SongId = href[strings.Index(href, "=")+1 : strings.Index(href, "&")]
+				} else {
+					glog.Errorf("strconv failed: %s\n", err.Error())
 				}
 			}
 			score.Score, _ = strconv.Atoi(s.Find("td.score").First().Text())
@@ -199,10 +216,12 @@ func RecentScores(client util.EaClient, playerCode int) (*[]ddr_models.Score, er
 		}
 	})
 
+	glog.Infof("recentscores loaded for for %s (%d scores)\n", client.GetUsername(), len(recentScores))
 	return &recentScores, nil
 }
 
 func WorkoutData(client util.EaClient, playerCode int) ([]ddr_models.WorkoutData, error) {
+	glog.Infof("loading workoutdata for user %s (playercode %d)\n", client.GetUsername(), playerCode)
 	const workoutResource = "/game/ddr/ddra20/p/playdata/workout.html"
 
 	workoutUri := util.BuildEaURI(workoutResource)
@@ -211,16 +230,19 @@ func WorkoutData(client util.EaClient, playerCode int) ([]ddr_models.WorkoutData
 
 	doc, err := util.GetPageContentAsGoQuery(client.Client, workoutUri)
 	if err != nil {
+		glog.Errorf("failed workoutdata for %s: %s\n", client.GetUsername(), err.Error())
 		return workoutData, err
 	}
 
 	table := doc.Find("table#work_out_left")
 	if table.Length() == 0 {
+		glog.Errorf("failed workoutdata for %s: could not find work_out_left\n", client.GetUsername())
 		return workoutData, fmt.Errorf("could not find work_out_left")
 	}
 
 	tableBody := table.First().Find("tbody").First()
 	if tableBody == nil {
+		glog.Errorf("failed workoutdata for %s: could not find table body\n", client.GetUsername())
 		return workoutData, fmt.Errorf("could not find table body")
 	}
 
@@ -246,6 +268,7 @@ func WorkoutData(client util.EaClient, playerCode int) ([]ddr_models.WorkoutData
 				} else if i == 3 {
 					numerical, err := regexp.Compile("[^0-9.]+")
 					if err != nil {
+						glog.Errorf("regex failure! %s\n", err.Error())
 						panic(err)
 					}
 					numericStr := numerical.ReplaceAllString(dataSelection.Text(), "")
@@ -260,5 +283,6 @@ func WorkoutData(client util.EaClient, playerCode int) ([]ddr_models.WorkoutData
 		}
 	})
 
+	glog.Infof("workoutdata loaded for user %s (%d datapoints)\n", client.GetUsername(), len(workoutData))
 	return workoutData, nil
 }

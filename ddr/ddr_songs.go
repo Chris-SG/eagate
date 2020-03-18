@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"github.com/chris-sg/eagate_models/ddr_models"
+	"github.com/golang/glog"
 	"io/ioutil"
 	"net/http"
 	"regexp"
@@ -22,6 +23,7 @@ var (
 
 // SongIds retrieves all song ids
 func SongIds(client util.EaClient) ([]string, error) {
+	glog.Infof("loading all song ids under user %s\n", client.GetUsername())
 	const musicDataResource = "/game/ddr/ddra20/p/playdata/music_data_single.html?offset={page}&filter=0&filtertype=0&sorttype=0"
 	const baseDetail = "/game/ddr/ddra20/p/playdata/music_detail.html?index="
 
@@ -31,6 +33,7 @@ func SongIds(client util.EaClient) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	glog.Infof("%d pages for song ids (user %s)\n", totalPages, client.GetUsername())
 
 	wg := new(sync.WaitGroup)
 	wg.Add(totalPages)
@@ -45,6 +48,7 @@ func SongIds(client util.EaClient) ([]string, error) {
 			doc, err := util.GetPageContentAsGoQuery(client.Client, currentPageURI)
 
 			if err != nil {
+				glog.Errorf("song ids failed page %d for user %s\n", currPage, client.GetUsername())
 				errorCount++
 				return
 			}
@@ -67,7 +71,10 @@ func SongIds(client util.EaClient) ([]string, error) {
 
 	wg.Wait()
 
+	glog.Infof("loaded %d song ids on user %s\n", len(lst), client.GetUsername())
+
 	if errorCount > 0 {
+		glog.Warningf("failed %d/%d pages for song ids (user %s)\n", errorCount, totalPages, client.GetUsername())
 		return lst, fmt.Errorf("failed to load all songs ids, %d/%d pages failed", errorCount, totalPages)
 	}
 
@@ -82,13 +89,14 @@ func songPageCount(client *http.Client) (int, error) {
 	currentPageURI := strings.Replace(musicDataURI, "{page}", strconv.Itoa(0), -1)
 	doc, err := util.GetPageContentAsGoQuery(client, currentPageURI)
 	if err != nil {
+		glog.Errorf("failed to get music data page %s\n", currentPageURI)
 		return 0, fmt.Errorf("failed to get music data page")
 	}
 	return doc.Find("div#paging_box").First().Find("div.page_num").Length(), nil
 }
 
 func SongData(client util.EaClient, songIds []string) ([]ddr_models.Song, error) {
-
+	glog.Infof("loading song data for %d songIds as user %s\n", len(songIds), client.GetUsername())
 	var (
 		songMtx = &sync.Mutex{}
 		songLst = make([]ddr_models.Song, 0)
@@ -109,6 +117,7 @@ func SongData(client util.EaClient, songIds []string) ([]ddr_models.Song, error)
 			doc, err := util.GetPageContentAsGoQuery(client.Client, baseDetailURI + songId)
 
 			if err != nil {
+				glog.Errorf("song data failed song id %s for user %s: %s\n", songId, client.GetUsername(), err.Error())
 				errorCount++
 				return
 			}
@@ -149,7 +158,10 @@ func SongData(client util.EaClient, songIds []string) ([]ddr_models.Song, error)
 
 	wg.Wait()
 
+	glog.Infof("loaded %d song data on user %s\n", len(songLst), client.GetUsername())
+
 	if errorCount > 0 {
+		glog.Warningf("failed %d/%d song ids for song data (user %s)\n", errorCount, len(songIds), client.GetUsername())
 		return songLst, fmt.Errorf("failed to load all song data, %d/%d songs failed", errorCount, len(songIds))
 	}
 
@@ -159,7 +171,7 @@ func SongData(client util.EaClient, songIds []string) ([]ddr_models.Song, error)
 // LoadSongDifficulties will lload allll the difficulty levels for
 // a provided song ID.
 func SongDifficulties(client util.EaClient, ids []string) ([]ddr_models.SongDifficulty, error) {
-
+	glog.Infof("loading song difficulties for %d song ids as user %s\n", len(ids), client.GetUsername())
 	var (
 		songMtx = &sync.Mutex{}
 		difficultyList = make([]ddr_models.SongDifficulty, 0)
@@ -182,6 +194,7 @@ func SongDifficulties(client util.EaClient, ids []string) ([]ddr_models.SongDiff
 			doc, err := util.GetPageContentAsGoQuery(client.Client, musicDiffDetails)
 
 			if err != nil {
+				glog.Errorf("song difficulties failed song id %s for user %s: %s\n", songId, client.GetUsername(), err.Error())
 				errorCount++
 				return
 			}
@@ -214,7 +227,10 @@ func SongDifficulties(client util.EaClient, ids []string) ([]ddr_models.SongDiff
 
 	wg.Wait()
 
+	glog.Infof("loaded %d difficulties across %d song ids (user %s)\n", len(difficultyList), len(ids), client.GetUsername())
+
 	if errorCount > 0 {
+		glog.Warningf("failed %d/%d songs for song difficulties (user %s)\n", errorCount, len(ids), client.GetUsername())
 		return difficultyList, fmt.Errorf("encountered %d errors processing difficulties", errorCount)
 	}
 
