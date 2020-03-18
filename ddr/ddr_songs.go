@@ -16,11 +16,6 @@ import (
 	"github.com/chris-sg/eagate/util"
 )
 
-var (
-	mtx = &sync.Mutex{}
-	lst = make([]string, 0)
-)
-
 // SongIds retrieves all song ids
 func SongIds(client util.EaClient) ([]string, error) {
 	glog.Infof("loading all song ids under user %s\n", client.GetUsername())
@@ -28,6 +23,8 @@ func SongIds(client util.EaClient) ([]string, error) {
 	const baseDetail = "/game/ddr/ddra20/p/playdata/music_detail.html?index="
 
 	musicDataURI := util.BuildEaURI(musicDataResource)
+	mtx := &sync.Mutex{}
+	lst := make([]string, 0)
 
 	totalPages, err := songPageCount(client.Client)
 	if err != nil {
@@ -200,7 +197,10 @@ func SongDifficulties(client util.EaClient, ids []string) ([]ddr_models.SongDiff
 			}
 			songDifficulties := make([]ddr_models.SongDifficulty, 0)
 
-			doc.Find("li.step").Each(func(i int, s *goquery.Selection) {
+			single := doc.Find("div#single")
+			double := doc.Find("div#double")
+
+			single.Find("li.step").Each(func(i int, s *goquery.Selection) {
 				img, exists := s.Find("img").Attr("src")
 				if exists {
 					imgExp := regexp.MustCompile(`songdetails_level_[0-9]*\.png`)
@@ -211,10 +211,32 @@ func SongDifficulties(client util.EaClient, ids []string) ([]ddr_models.SongDiff
 					if err != nil {
 						v = -1
 					}
+
 					songDifficulties = append(songDifficulties, ddr_models.SongDifficulty{
 						SongId:          songId,
-						Mode: ddr_models.Mode(i%2).String(),
-						Difficulty:    ddr_models.Difficulty(i%5).String(),
+						Mode: ddr_models.Single.String(),
+						Difficulty:    ddr_models.Difficulty(i).String(),
+						DifficultyValue: int16(v),
+					})
+				}
+			})
+
+			double.Find("li.step").Each(func(i int, s *goquery.Selection) {
+				img, exists := s.Find("img").Attr("src")
+				if exists {
+					imgExp := regexp.MustCompile(`songdetails_level_[0-9]*\.png`)
+					lvlExp := regexp.MustCompile("[^0-9]+")
+					s := imgExp.FindString(img)
+					s = lvlExp.ReplaceAllString(s, "")
+					v, err := strconv.ParseInt(s, 10, 8)
+					if err != nil {
+						v = -1
+					}
+
+					songDifficulties = append(songDifficulties, ddr_models.SongDifficulty{
+						SongId:          songId,
+						Mode: ddr_models.Double.String(),
+						Difficulty:    ddr_models.Difficulty(i).String(),
 						DifficultyValue: int16(v),
 					})
 				}

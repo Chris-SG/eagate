@@ -168,6 +168,10 @@ func SolveCaptcha(client util.EaClient) (string, string, error) {
 	var choiceImages []Choice
 
 	for _, element := range captchaData.Data.ChoiceList {
+		if len(element.ImgURL) == 0 {
+			continue
+		}
+		glog.Infoln(element)
 		picture, err := LoadMD5OfImageURI(element.ImgURL)
 		if err == nil {
 			choiceImages = append(choiceImages, Choice{picture, element.Key})
@@ -183,9 +187,10 @@ func SolveCaptcha(client util.EaClient) (string, string, error) {
 			captchaString += element.key
 		} else if character == "unknown" {
 			glog.Errorf("missing captcha character, key %s md5 %s character %s", element.key, element.md5, character)
-		} else {
+		} else if err != nil {
 			glog.Errorf("captcha error: %s", err.Error())
-			fmt.Println(err)
+		} else {
+			glog.Errorf("unknown error for %+#v", element)
 		}
 	}
 

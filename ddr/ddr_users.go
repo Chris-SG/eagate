@@ -103,6 +103,9 @@ func SongStatistics(client util.EaClient, charts []ddr_models.SongDifficulty, pl
 			defer wg.Done()
 			chartDetails := strings.Replace(musicDetailUri, "{id}", diff.SongId, -1)
 			diffId := int(ddr_models.StringToDifficulty(diff.Difficulty)) + (5 * int(ddr_models.StringToMode(diff.Mode)))
+			if ddr_models.StringToMode(diff.Mode) == ddr_models.Double {
+				diffId--
+			}
 			chartDetails = strings.Replace(chartDetails, "{diff}", strconv.Itoa(diffId), -1)
 
 			doc, err := util.GetPageContentAsGoQuery(client.Client, chartDetails)
@@ -186,6 +189,9 @@ func RecentScores(client util.EaClient, playerCode int) (*[]ddr_models.Score, er
 				difficulty, err := strconv.Atoi(href[len(href)-1:])
 				if err == nil {
 					score.Mode = ddr_models.Mode(difficulty / 5).String()
+					if ddr_models.StringToMode(score.Mode) == ddr_models.Double {
+						difficulty++
+					}
 					score.Difficulty = ddr_models.Difficulty(difficulty % 5).String()
 					score.SongId = href[strings.Index(href, "=")+1 : strings.Index(href, "&")]
 				} else {
