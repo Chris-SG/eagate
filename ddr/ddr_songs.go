@@ -2,7 +2,6 @@ package ddr
 
 import (
 	"encoding/base64"
-	"fmt"
 	"github.com/chris-sg/eagate_models/ddr_models"
 	"github.com/golang/glog"
 	"io/ioutil"
@@ -16,245 +15,201 @@ import (
 	"github.com/chris-sg/eagate/util"
 )
 
-// SongIds retrieves all song ids
-func SongIds(client util.EaClient) ([]string, error) {
-	glog.Infof("loading all song ids under user %s\n", client.GetUsername())
-	const musicDataResource = "/game/ddr/ddra20/p/playdata/music_data_single.html?offset={page}&filter=0&filtertype=0&sorttype=0"
-	const baseDetail = "/game/ddr/ddra20/p/playdata/music_detail.html?index="
-
-	musicDataURI := util.BuildEaURI(musicDataResource)
+func SongIdsForClient(client util.EaClient) (songIds []string, err error) {
 	mtx := &sync.Mutex{}
-	lst := make([]string, 0)
 
-	totalPages, err := songPageCount(client.Client)
+	musicDataDoc, err := musicDataSingleDocument(client, 0)
 	if err != nil {
-		return nil, err
+		return
 	}
-	glog.Infof("%d pages for song ids (user %s)\n", totalPages, client.GetUsername())
+	pageCount := pageCountFromMusicDataDocument(musicDataDoc)
 
 	wg := new(sync.WaitGroup)
-	wg.Add(totalPages)
+	wg.Add(pageCount)
 
-	errorCount := 0
-
-	for idx := 0; idx < totalPages; idx++ {
-		go func(currPage int) {
+	for idx := 0; idx < pageCount; idx++ {
+		go func(page int) {
 			defer wg.Done()
 
-			currentPageURI := strings.Replace(musicDataURI, "{page}", strconv.Itoa(currPage), -1)
-			doc, err := util.GetPageContentAsGoQuery(client.Client, currentPageURI)
-
+			musicDataDoc, err := musicDataSingleDocument(client, page)
 			if err != nil {
-				glog.Errorf("song ids failed page %d for user %s\n", currPage, client.GetUsername())
-				errorCount++
+				glog.Errorf("failed to load musicDataSingleDocument for user %s page %d: %s\n", client.GetUsername(), page, err.Error())
 				return
 			}
 
-			internalList := make([]string, 0)
+			pageSongIds := songIdsFromMusicDataDocument(musicDataDoc)
 
-			doc.Find("tr.data").Each(func(i int, s *goquery.Selection) {
-				aElement := s.Find("a").First()
-				href, exists := aElement.Attr("href")
-				if exists {
-					id := strings.Replace(href, baseDetail, "", -1)
-					internalList = append(internalList, id)
-				}
-			})
 			mtx.Lock()
 			defer mtx.Unlock()
-			lst = append(lst, internalList...)
+			songIds = append(songIds, pageSongIds...)
 		}(idx)
 	}
 
 	wg.Wait()
+	glog.Infof("loaded %d song ids on user %s\n", len(songIds), client.GetUsername())
 
-	glog.Infof("loaded %d song ids on user %s\n", len(lst), client.GetUsername())
-
-	if errorCount > 0 {
-		glog.Warningf("failed %d/%d pages for song ids (user %s)\n", errorCount, totalPages, client.GetUsername())
-		return lst, fmt.Errorf("failed to load all songs ids, %d/%d pages failed", errorCount, totalPages)
-	}
-
-	return lst, nil
+	return
 }
 
-func songPageCount(client *http.Client) (int, error) {
-	const musicDataResource = "/game/ddr/ddra20/p/playdata/music_data_single.html?offset={page}&filter=0&filtertype=0&sorttype=0"
-
-	musicDataURI := util.BuildEaURI(musicDataResource)
-
-	currentPageURI := strings.Replace(musicDataURI, "{page}", strconv.Itoa(0), -1)
-	doc, err := util.GetPageContentAsGoQuery(client, currentPageURI)
-	if err != nil {
-		glog.Errorf("failed to get music data page %s\n", currentPageURI)
-		return 0, fmt.Errorf("failed to get music data page")
-	}
-	return doc.Find("div#paging_box").First().Find("div.page_num").Length(), nil
+func songIdsFromMusicDataDocument(document *goquery.Document) (songIds []string) {
+	const songDetailBaseUri = "/game/ddr/ddra20/p/playdata/music_detail.html?index="
+	document.Find("tr.data").Each(func(i int, s *goquery.Selection) {
+		aElement := s.Find("a").First()
+		href, exists := aElement.Attr("href")
+		if exists {
+			id := strings.Replace(href, songDetailBaseUri, "", -1)
+			songIds = append(songIds, id)
+		}
+	})
+	return
 }
 
-func SongData(client util.EaClient, songIds []string) ([]ddr_models.Song, error) {
-	glog.Infof("loading song data for %d songIds as user %s\n", len(songIds), client.GetUsername())
-	var (
-		songMtx = &sync.Mutex{}
-		songLst = make([]ddr_models.Song, 0)
-	)
+func pageCountFromMusicDataDocument(document *goquery.Document) (pageCount int) {
+	pageCount = document.Find("div#paging_box").First().Find("div.page_num").Length()
+	return
+}
 
-	const baseDetail = "/game/ddr/ddra20/p/playdata/music_detail.html?index="
-
-	baseDetailURI := util.BuildEaURI(baseDetail)
+func SongDataForClient(client util.EaClient, songIds []string) (songs []ddr_models.Song) {
+	mtx := &sync.Mutex{}
 
 	wg := new(sync.WaitGroup)
 	wg.Add(len(songIds))
 
-	errorCount := 0
+	errCount := 0
 
 	for _, id := range songIds {
-		go func(songId string, songList *[]ddr_models.Song) {
+		go func(songId string) {
 			defer wg.Done()
-			doc, err := util.GetPageContentAsGoQuery(client.Client, baseDetailURI + songId)
-
+			document, err := musicDetailDocument(client, songId)
 			if err != nil {
-				glog.Errorf("song data failed song id %s for user %s: %s\n", songId, client.GetUsername(), err.Error())
-				errorCount++
+				glog.Errorf("failed to get document for song id %s: %s", songId, err.Error())
+				errCount++
 				return
 			}
+			song := songDataFromDocument(document, songId)
 
-			song := ddr_models.Song{ Id: songId }
-
-			doc.Find("table#music_info").First().Find("td").Each(func(i int, s *goquery.Selection) {
-				img := s.Find("img")
-				if img.Length() == 0 {
-					html, _ := s.Html()
-					songDataPair := strings.Split(html, "<br/>")
-					song.Name = songDataPair[0]
-					song.Artist = songDataPair[1]
-				} else {
-
-					imgPath, exists := img.First().Attr("src")
-					if exists {
-						imgUrl := fmt.Sprintf("https://p.eagate.573.jp%s", imgPath)
-						imgData, err := client.Client.Get(imgUrl)
-						if err != nil {
-							errorCount++
-						} else {
-							body, err := ioutil.ReadAll(imgData.Body)
-							if err == nil {
-								song.Image = base64.StdEncoding.EncodeToString(body)
-							}
-						}
-						imgData.Body.Close()
-					}
-				}
-			})
-
-			songMtx.Lock()
-			defer songMtx.Unlock()
-			*songList = append(*songList, song)
-		}(id, &songLst)
+			mtx.Lock()
+			defer mtx.Unlock()
+			songs = append(songs, song)
+		}(id)
 	}
 
 	wg.Wait()
+	glog.Infof("loaded %d song data on user %s\n", len(songs), client.GetUsername())
 
-	glog.Infof("loaded %d song data on user %s\n", len(songLst), client.GetUsername())
-
-	if errorCount > 0 {
-		glog.Warningf("failed %d/%d song ids for song data (user %s)\n", errorCount, len(songIds), client.GetUsername())
-		return songLst, fmt.Errorf("failed to load all song data, %d/%d songs failed", errorCount, len(songIds))
+	if errCount > 0 {
+		glog.Warningf("failed %d/%d song ids for song data (user %s)\n", errCount, len(songIds), client.GetUsername())
 	}
 
-	return songLst, nil
+	return
 }
 
-// LoadSongDifficulties will lload allll the difficulty levels for
-// a provided song ID.
-func SongDifficulties(client util.EaClient, ids []string) ([]ddr_models.SongDifficulty, error) {
-	glog.Infof("loading song difficulties for %d song ids as user %s\n", len(ids), client.GetUsername())
-	var (
-		songMtx = &sync.Mutex{}
-		difficultyList = make([]ddr_models.SongDifficulty, 0)
-	)
+func songDataFromDocument(document *goquery.Document, songId string) (song ddr_models.Song) {
+	song.Id = songId
+	document.Find("table#music_info").First().Find("td").Each(func(i int, s *goquery.Selection) {
+		img := s.Find("img")
+		if img.Length() == 0 {
+			html, _ := s.Html()
+			songDataPair := strings.Split(html, "<br/>")
+			song.Name = songDataPair[0]
+			song.Artist = songDataPair[1]
+		} else {
+			imgPath, exists := img.First().Attr("src")
+			if exists {
+				imgUrl := util.BuildEaURI(imgPath)
+				imgData, err := http.Get(imgUrl)
+				defer imgData.Body.Close()
+				if err == nil {
+					body, err := ioutil.ReadAll(imgData.Body)
+					if err == nil {
+						song.Image = base64.StdEncoding.EncodeToString(body)
+					}
+				}
+			}
+		}
+	})
+	return
+}
 
-	const musicDetailResource = "/game/ddr/ddra20/p/playdata/music_detail.html?index={id}&diff=0"
-
-	musicDetailUri := util.BuildEaURI(musicDetailResource)
+func SongDifficultiesForClient(client util.EaClient, songIds []string) (difficulties []ddr_models.SongDifficulty) {
+	mtx := &sync.Mutex{}
 
 	wg := new(sync.WaitGroup)
-	wg.Add(len(ids))
+	wg.Add(len(songIds))
 
-	errorCount := 0
+	errCount := 0
 
-	for _, id := range ids {
-		go func(songId string, difficulties *[]ddr_models.SongDifficulty) {
+	for _, id := range songIds {
+		go func(songId string) {
 			defer wg.Done()
-			musicDiffDetails := strings.Replace(musicDetailUri, "{id}", songId, -1)
-
-			doc, err := util.GetPageContentAsGoQuery(client.Client, musicDiffDetails)
-
+			document, err := musicDetailDocument(client, songId)
 			if err != nil {
-				glog.Errorf("song difficulties failed song id %s for user %s: %s\n", songId, client.GetUsername(), err.Error())
-				errorCount++
+				glog.Errorf("failed to get document for song id %s: %s", songId, err.Error())
+				errCount++
 				return
 			}
-			songDifficulties := make([]ddr_models.SongDifficulty, 0)
+			songDifficulties := songDifficultiesFromDocument(document, songId)
 
-			single := doc.Find("div#single")
-			double := doc.Find("div#double")
-
-			single.Find("li.step").Each(func(i int, s *goquery.Selection) {
-				img, exists := s.Find("img").Attr("src")
-				if exists {
-					imgExp := regexp.MustCompile(`songdetails_level_[0-9]*\.png`)
-					lvlExp := regexp.MustCompile("[^0-9]+")
-					s := imgExp.FindString(img)
-					s = lvlExp.ReplaceAllString(s, "")
-					v, err := strconv.ParseInt(s, 10, 8)
-					if err != nil {
-						v = -1
-					}
-
-					songDifficulties = append(songDifficulties, ddr_models.SongDifficulty{
-						SongId:          songId,
-						Mode: ddr_models.Single.String(),
-						Difficulty:    ddr_models.Difficulty(i).String(),
-						DifficultyValue: int16(v),
-					})
-				}
-			})
-
-			double.Find("li.step").Each(func(i int, s *goquery.Selection) {
-				img, exists := s.Find("img").Attr("src")
-				if exists {
-					imgExp := regexp.MustCompile(`songdetails_level_[0-9]*\.png`)
-					lvlExp := regexp.MustCompile("[^0-9]+")
-					s := imgExp.FindString(img)
-					s = lvlExp.ReplaceAllString(s, "")
-					v, err := strconv.ParseInt(s, 10, 8)
-					if err != nil {
-						v = -1
-					}
-
-					songDifficulties = append(songDifficulties, ddr_models.SongDifficulty{
-						SongId:          songId,
-						Mode: ddr_models.Double.String(),
-						Difficulty:    ddr_models.Difficulty(i).String(),
-						DifficultyValue: int16(v),
-					})
-				}
-			})
-			songMtx.Lock()
-			defer songMtx.Unlock()
-			*difficulties = append(*difficulties, songDifficulties...)
-		}(id, &difficultyList)
+			mtx.Lock()
+			defer mtx.Unlock()
+			difficulties = append(difficulties, songDifficulties...)
+		}(id)
 	}
 
 	wg.Wait()
+	glog.Infof("loaded %d song difficulties for %d songs on user %s\n", len(difficulties), len(songIds), client.GetUsername())
 
-	glog.Infof("loaded %d difficulties across %d song ids (user %s)\n", len(difficultyList), len(ids), client.GetUsername())
-
-	if errorCount > 0 {
-		glog.Warningf("failed %d/%d songs for song difficulties (user %s)\n", errorCount, len(ids), client.GetUsername())
-		return difficultyList, fmt.Errorf("encountered %d errors processing difficulties", errorCount)
+	if errCount > 0 {
+		glog.Warningf("failed %d/%d song ids for song data (user %s)\n", errCount, len(songIds), client.GetUsername())
 	}
 
-	return difficultyList, nil
+	return
+}
+
+func songDifficultiesFromDocument(document *goquery.Document, songId string) (songDifficulties []ddr_models.SongDifficulty) {
+	single := document.Find("div#single")
+	double := document.Find("div#double")
+
+	single.Find("li.step").Each(func(i int, s *goquery.Selection) {
+		img, exists := s.Find("img").Attr("src")
+		if exists {
+			imgExp := regexp.MustCompile(`songdetails_level_[0-9]*\.png`)
+			lvlExp := regexp.MustCompile("[^0-9]+")
+			s := imgExp.FindString(img)
+			s = lvlExp.ReplaceAllString(s, "")
+			v, err := strconv.ParseInt(s, 10, 8)
+			if err != nil {
+				v = -1
+			}
+
+			songDifficulties = append(songDifficulties, ddr_models.SongDifficulty{
+				SongId:          songId,
+				Mode: ddr_models.Single.String(),
+				Difficulty:    ddr_models.Difficulty(i).String(),
+				DifficultyValue: int16(v),
+			})
+		}
+	})
+
+	double.Find("li.step").Each(func(i int, s *goquery.Selection) {
+		img, exists := s.Find("img").Attr("src")
+		if exists {
+			imgExp := regexp.MustCompile(`songdetails_level_[0-9]*\.png`)
+			lvlExp := regexp.MustCompile("[^0-9]+")
+			s := imgExp.FindString(img)
+			s = lvlExp.ReplaceAllString(s, "")
+			v, err := strconv.ParseInt(s, 10, 8)
+			if err != nil {
+				v = -1
+			}
+
+			songDifficulties = append(songDifficulties, ddr_models.SongDifficulty{
+				SongId:          songId,
+				Mode: ddr_models.Double.String(),
+				Difficulty:    ddr_models.Difficulty(i).String(),
+				DifficultyValue: int16(v),
+			})
+		}
+	})
+	return
 }
