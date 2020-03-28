@@ -14,72 +14,119 @@ import (
 	"time"
 )
 
-// PlayerInformation retrieves the base player
-// information using the provided cookie.
-func PlayerInformation(client util.EaClient) (*ddr_models.PlayerDetails, *ddr_models.Playcount, error) {
-	glog.Infof("loading playerinformation for user %s\n", client.GetUsername())
-	const playerInformationResource = "/game/ddr/ddra20/p/playdata/index.html"
-
-	playerInformationURI := util.BuildEaURI(playerInformationResource)
-	doc, err := util.GetPageContentAsGoQuery(client.Client, playerInformationURI)
+func PlayerInformationForClient(client util.EaClient) (playerDetails ddr_models.PlayerDetails, playcount ddr_models.Playcount, err error) {
+	document, err := playerInformationDocument(client)
 	if err != nil {
-		glog.Errorf("failed to load playerinformation resource for user %s: %s\n", client.GetUsername(), err.Error())
-		return nil, nil, err
+		return
 	}
-
-	pi := ddr_models.PlayerDetails{}
-	piType := reflect.TypeOf(pi)
-
-	pc := ddr_models.Playcount{}
-	pcType := reflect.TypeOf(pc)
-
-	sougou := doc.Find("div#sougou").First()
-	single := doc.Find("div#single").First()
-	double := doc.Find("div#double").First()
-
-	if sougou == nil || single == nil || double == nil {
-		glog.Errorf("failed to load playerinformation resource for user %s: failed to load all divs\n", client.GetUsername())
-		return nil, nil, fmt.Errorf("unable to find all divs")
-	}
-
-	sougouDetails, err := util.TableThTd(sougou.Find("table#status").First())
+	playerDetails, err = playerInformationFromPlayerDocument(document)
 	if err != nil {
-		glog.Errorf("failed to load playerinformation resource for user %s: %s\n", client.GetUsername(), err.Error())
-		return nil, nil, err
+		return
 	}
-	util.SetStructValues(piType, reflect.ValueOf(&pi), sougouDetails)
-	util.SetStructValues(pcType, reflect.ValueOf(&pc), sougouDetails)
-
-	singleDetails, err := util.TableThTd(single.Find("table.small_table").First())
+	playcount, err = playcountFromPlayerDocument(document)
 	if err != nil {
-		glog.Errorf("failed to load playerinformation resource for user %s: %s\n", client.GetUsername(), err.Error())
-		return nil, nil, err
+		return
 	}
-	singleMap := make(map[string]string)
-	for k, v := range singleDetails {
-		singleMap[k + "_single"] = v
-	}
-	util.SetStructValues(piType, reflect.ValueOf(&pi), singleMap)
-	util.SetStructValues(pcType, reflect.ValueOf(&pc), singleMap)
 
-	doubleDetails, err := util.TableThTd(double.Find("table.small_table").First())
+	return
+}
+
+func playerInformationFromPlayerDocument(document *goquery.Document) (playerDetails ddr_models.PlayerDetails, err error) {
+	status := document.Find("table#status").First()
+	if status == nil {
+		err = fmt.Errorf("cannot find status table")
+		return
+	}
+	statusDetails, err := util.TableThTd(status)
 	if err != nil {
-		glog.Errorf("failed to load playerinformation resource for user %s: %s\n", client.GetUsername(), err.Error())
-		return nil, nil, err
+		return
 	}
-	doubleMap := make(map[string]string)
-	for k, v := range doubleDetails {
-		doubleMap[k + "_double"] = v
+	playerDetails.Name = statusDetails["ダンサーネーム"]
+	code, err := strconv.ParseInt(statusDetails["DDR-CODE"], 10, 32)
+	if err != nil {
+		return
 	}
-	util.SetStructValues(piType, reflect.ValueOf(&pi), doubleMap)
-	util.SetStructValues(pcType, reflect.ValueOf(&pc), doubleMap)
+	playerDetails.Code = int(code)
+	playerDetails.Prefecture = statusDetails["所属都道府県"]
+	playerDetails.SingleRank = statusDetails["段位(SINGLE)"]
+	playerDetails.DoubleRank = statusDetails["段位(DOUBLE)"]
+	playerDetails.Affiliation = statusDetails["所属クラス"]
 
-	eagateUser := client.GetUsername()
-	pi.EaGateUser = &eagateUser
-	pc.PlayerCode = pi.Code
+	return
+}
 
-	glog.Infof("loaded playerinformation for %s, dancer code %d, playcount %d\n", eagateUser, pi.Code, pc.Playcount)
-	return &pi, &pc, nil
+func playcountFromPlayerDocument(document *goquery.Document) (playcount ddr_models.Playcount, err error) {
+	status := document.Find("table#status").First()
+	if status == nil {
+		err = fmt.Errorf("cannot find status table")
+		return
+	}
+	single := document.Find("div#single table.small_table").First()
+	if single == nil {
+		err = fmt.Errorf("cannot find single table")
+		return
+	}
+	double := document.Find("div#double table.small_table").First()
+	if double == nil {
+		err = fmt.Errorf("cannot find double table")
+		return
+	}
+
+	numericalStripper, _ := regexp.Compile("[^0-9]+")
+	timeFormat := "2006-01-02 15:04:05"
+	timeLocation, err := time.LoadLocation("Asia/Tokyo")
+	if err != nil {
+		glog.Warningln("failed to load timezone location Asia/Tokyo")
+		return
+	}
+
+	statusDetails, err := util.TableThTd(status)
+	if err != nil {
+		return
+	}
+	singleDetails, err := util.TableThTd(single)
+	if err != nil {
+		return
+	}
+	doubleDetails, err := util.TableThTd(double)
+	if err != nil {
+		return
+	}
+
+	code, err := strconv.ParseInt(statusDetails["DDR-CODE"], 10, 32)
+	if err != nil {
+		return
+	}
+	playcount.PlayerCode = int(code)
+
+	playcount.Playcount, err = strconv.Atoi(numericalStripper.ReplaceAllString(statusDetails["総プレー回数"], ""))
+	if err != nil {
+		return
+	}
+	playcount.LastPlayDate, err = time.ParseInLocation(timeFormat, statusDetails["最終プレー日時"], timeLocation)
+	if err != nil {
+		return
+	}
+
+	playcount.SinglePlaycount, err = strconv.Atoi(numericalStripper.ReplaceAllString(singleDetails["プレー回数"], ""))
+	if err != nil {
+		return
+	}
+	playcount.SingleLastPlayDate, err = time.ParseInLocation(timeFormat, singleDetails["最終プレー日時"], timeLocation)
+	if err != nil {
+		return
+	}
+
+	playcount.DoublePlaycount, err = strconv.Atoi(numericalStripper.ReplaceAllString(doubleDetails["プレー回数"], ""))
+	if err != nil {
+		return
+	}
+	playcount.DoubleLastPlayDate, err = time.ParseInLocation(timeFormat, doubleDetails["最終プレー日時"], timeLocation)
+	if err != nil {
+		return
+	}
+
+	return
 }
 
 func SongStatistics(client util.EaClient, charts []ddr_models.SongDifficulty, playerCode int) ([]ddr_models.SongStatistics, error) {
