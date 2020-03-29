@@ -76,7 +76,6 @@ func TestPlaycountFromDocument(t *testing.T) {
 		SingleLastPlayDate: expectedSingleLastPlayDate,
 		DoublePlaycount:    20,
 		DoubleLastPlayDate: expectedDoubleLastPlayDate,
-		Player:             ddr_models.PlayerDetails{},
 		PlayerCode:         12345678,
 	}
 
@@ -150,7 +149,6 @@ func TestPlayerInformationForClient(t *testing.T) {
 		SingleLastPlayDate: expectedSingleLastPlayDate,
 		DoublePlaycount:    20,
 		DoubleLastPlayDate: expectedDoubleLastPlayDate,
-		Player:             ddr_models.PlayerDetails{},
 		PlayerCode:         12345678,
 	}
 
@@ -177,8 +175,93 @@ func TestPlayerInformationForClient(t *testing.T) {
 	}
 }
 
-func TestSongStatisticsFromDocument(t *testing.T) {
+func TestChartStatisticsFromDocument(t *testing.T) {
+	// Setup test
+	const testFile = "./test_data/music_detail/1PoOQPd0D01Q9O0doiQQQ8D8Q096bDq9.html"
+	const testId = "1PoOQPd0D01Q9O0doiQQQ8D8Q096bDq9"
 
+	// Setup expected results
+	timeFormat := "2006-01-02 15:04:05"
+	timeLocation, err := time.LoadLocation("Asia/Tokyo")
+	if err != nil {
+		glog.Warningln("failed to load timezone location Asia/Tokyo")
+		return
+	}
+
+	difficulty := ddr_models.SongDifficulty{
+		SongId:          "1PoOQPd0D01Q9O0doiQQQ8D8Q096bDq9",
+		Mode:            "SINGLE",
+		Difficulty:      "BEGINNER",
+		DifficultyValue: 3,
+	}
+
+	expectedTime, _ := time.ParseInLocation(timeFormat, "2018-06-07 19:11:17", timeLocation)
+
+	expectedStatistics := ddr_models.SongStatistics{
+		BestScore:  831790,
+		Lamp:       "---",
+		Rank:       "A",
+		PlayCount:  1,
+		ClearCount: 1,
+		MaxCombo:   108,
+		LastPlayed: expectedTime,
+		SongId:     difficulty.SongId,
+		Mode:       difficulty.Mode,
+		Difficulty: difficulty.Difficulty,
+		PlayerCode: 12345678,
+	}
+
+	// Run Test
+	document, err := documentFromFile(testFile)
+	if err != nil {
+		t.Fatalf("could not load %s: %s", testFile, err.Error())
+	}
+
+	statistics, err := chartStatisticsFromDocument(document, 12345678, difficulty)
+
+	if err != nil {
+		t.Errorf("failed to load chart stats from document: %s", err.Error())
+	}
+
+	if statistics.BestScore != expectedStatistics.BestScore ||
+		statistics.Lamp != expectedStatistics.Lamp ||
+		statistics.Rank != expectedStatistics.Rank ||
+		statistics.PlayCount != expectedStatistics.PlayCount ||
+		statistics.ClearCount != expectedStatistics.ClearCount ||
+		statistics.MaxCombo != expectedStatistics.MaxCombo ||
+		statistics.LastPlayed.String() != expectedStatistics.LastPlayed.String() ||
+		statistics.SongId != expectedStatistics.SongId ||
+		statistics.Mode != expectedStatistics.Mode ||
+		statistics.Difficulty != expectedStatistics.Difficulty ||
+		statistics.PlayerCode != expectedStatistics.PlayerCode {
+		t.Errorf("statistics do not match, expected %+#v but got %+#v", expectedStatistics, statistics)
+	}
+}
+
+func TestNoPlaySongStatisticsForDocument(t *testing.T) {
+	// Setup test
+	const testFile = "./test_data/music_detail/8bQQ0lP96186D8Ibo8IoOd6o16qioiIo.html"
+	const testId = "8bQQ0lP96186D8Ibo8IoOd6o16qioiIo"
+
+	// Setup expected results
+
+	expectedStatistics := ddr_models.SongStatistics{}
+
+	// Run Test
+	document, err := documentFromFile(testFile)
+	if err != nil {
+		t.Fatalf("could not load %s: %s", testFile, err.Error())
+	}
+
+	statistics, err := chartStatisticsFromDocument(document, 12345678, ddr_models.SongDifficulty{})
+
+	if err != nil {
+		t.Errorf("failed to load chart stats from document: %s", err.Error())
+	}
+
+	if statistics != expectedStatistics {
+		t.Errorf("statistics do not match, expected %+#v but got %+#v", expectedStatistics, statistics)
+	}
 }
 
 func TestSongStatisticsForClient(t *testing.T) {

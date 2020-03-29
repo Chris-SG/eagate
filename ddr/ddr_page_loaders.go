@@ -3,6 +3,7 @@ package ddr
 import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/chris-sg/eagate/util"
+	"github.com/chris-sg/eagate_models/ddr_models"
 	"strconv"
 	"strings"
 )
@@ -25,12 +26,14 @@ func musicDetailDocument(client util.EaClient, songId string) (document *goquery
 	return
 }
 
-func musicDetailDifficultyDocument(client util.EaClient, songId string, difficulty int) (document *goquery.Document, err error) {
+func musicDetailDifficultyDocument(client util.EaClient, songId string, mode ddr_models.Mode, difficulty ddr_models.Difficulty) (document *goquery.Document, err error) {
 	const baseDetail = "/game/ddr/ddra20/p/playdata/music_detail.html?index={id}&diff={diff}"
 	musicDetailURI := util.BuildEaURI(baseDetail)
 
+	difficultyId := (int(difficulty) * (int(mode) + 1)) - int(mode)
+
 	musicDetailURI = strings.Replace(musicDetailURI, "{id}", songId, -1)
-	musicDetailURI = strings.Replace(musicDetailURI, "{diff}", strconv.Itoa(difficulty), -1)
+	musicDetailURI = strings.Replace(musicDetailURI, "{diff}", strconv.Itoa(difficultyId), -1)
 	document, err = util.GetPageContentAsGoQuery(client.Client, musicDetailURI)
 	return
 }

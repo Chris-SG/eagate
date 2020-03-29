@@ -6,7 +6,6 @@ import (
 	"github.com/chris-sg/eagate/util"
 	"github.com/chris-sg/eagate_models/ddr_models"
 	"github.com/golang/glog"
-	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -129,174 +128,183 @@ func playcountFromPlayerDocument(document *goquery.Document) (playcount ddr_mode
 	return
 }
 
-func SongStatistics(client util.EaClient, charts []ddr_models.SongDifficulty, playerCode int) ([]ddr_models.SongStatistics, error) {
-	glog.Infof("loading songstatistics for user %s (%d charts)\n", client.GetUsername(), len(charts))
-	var (
-		songMtx = &sync.Mutex{}
-		songStatistics = make([]ddr_models.SongStatistics, 0)
-	)
-
-	const musicDetailResource = "/game/ddr/ddra20/p/playdata/music_detail.html?index={id}&diff={diff}"
-
-	musicDetailUri := util.BuildEaURI(musicDetailResource)
+func SongStatisticsForClient(client util.EaClient, charts []ddr_models.SongDifficulty, playerCode int) (songStatistics []ddr_models.SongStatistics, err error) {
+	mtx := &sync.Mutex{}
 
 	wg := new(sync.WaitGroup)
 	wg.Add(len(charts))
 
-	errorCount := 0
+	errCount := 0
 
 	for _, chart := range charts {
-		go func(diff ddr_models.SongDifficulty, songStats *[]ddr_models.SongStatistics) {
+		go func (diff ddr_models.SongDifficulty) {
 			defer wg.Done()
-			chartDetails := strings.Replace(musicDetailUri, "{id}", diff.SongId, -1)
-			diffId := int(ddr_models.StringToDifficulty(diff.Difficulty)) + (5 * int(ddr_models.StringToMode(diff.Mode)))
-			if ddr_models.StringToMode(diff.Mode) == ddr_models.Double {
-				diffId--
-			}
-			chartDetails = strings.Replace(chartDetails, "{diff}", strconv.Itoa(diffId), -1)
-
-			doc, err := util.GetPageContentAsGoQuery(client.Client, chartDetails)
+			document, err := musicDetailDifficultyDocument(client, diff.SongId, ddr_models.StringToMode(diff.Mode), ddr_models.StringToDifficulty(diff.Difficulty))
 			if err != nil {
-				glog.Errorf("failed loading song statistic for %s: %s\n", client.GetUsername(), err.Error())
-				errorCount++
+				glog.Errorf("failed to load document for client %s: songid %s\n", client.GetUsername(), diff.SongId)
+				errCount++
 				return
 			}
-
-			if strings.Contains(doc.Find("div#popup_cnt").Text(), "NO PLAY") {
-				return
-			}
-
-			details, err := util.TableThTd(doc.Find("table#music_detail_table"))
+			statistics, err := chartStatisticsFromDocument(document, playerCode, diff)
 			if err != nil {
-				glog.Errorf("failed loading song statistic for %s: %s\n", client.GetUsername(), err.Error())
-				errorCount++
+				glog.Errorf("failed to load statistics for client %s: songid %s\n", client.GetUsername(), diff.SongId)
+				errCount++
+				return
+			}
+			if statistics.PlayerCode == 0 {
 				return
 			}
 
-			stat := ddr_models.SongStatistics{}
-			statType := reflect.TypeOf(stat)
-
-			util.SetStructValues(statType, reflect.ValueOf(&stat), details)
-			stat.SongId = diff.SongId
-			stat.Difficulty = diff.Difficulty
-			stat.Mode = diff.Mode
-			stat.PlayerCode = playerCode
-
-			songMtx.Lock()
-			defer songMtx.Unlock()
-			*songStats = append(*songStats, stat)
-		}(chart, &songStatistics)
+			mtx.Lock()
+			defer mtx.Unlock()
+			songStatistics = append(songStatistics, statistics)
+		}(chart)
 	}
 
-	wg.Wait()
-
-	if errorCount > 0 {
-		glog.Errorf("failed loading song statistic for %s due to %d errors\n", client.GetUsername(), errorCount)
-		return songStatistics, fmt.Errorf("Failed getting score data for ")
+	if errCount > 0 {
+		glog.Warningf("failed loading all statistic for %s:  %d of %d errors\n", client.GetUsername(), errCount, len(charts))
+		err = fmt.Errorf("failed to load %d of %d chart statistics", errCount, len(charts))
+		return
 	}
 
 	glog.Infof("got %d statistics for user %s\n", len(songStatistics), client.GetUsername())
-	return songStatistics, nil
+	return
 }
 
+func chartStatisticsFromDocument(document *goquery.Document, playerCode int, difficulty ddr_models.SongDifficulty) (songStatistics ddr_models.SongStatistics, err error) {
+	if strings.Contains(document.Find("div#popup_cnt").Text(), "NO PLAY") {
+		return
+	}
+	if strings.Contains(document.Find("div#popup_cnt").Text(), "難易度を選択してください。") {
+		return
+	}
 
-func RecentScores(client util.EaClient, playerCode int) (*[]ddr_models.Score, error) {
-	glog.Infof("loading recentscores for user %s (playercode %d)\n", client.GetUsername(), playerCode)
-	const recentSongsResource = "/game/ddr/ddra20/p/playdata/music_recent.html"
-	
-	recentSongsUri := util.BuildEaURI(recentSongsResource)
-	
-	recentScores := make([]ddr_models.Score, 0)
+	statsTable := document.Find("table#music_detail_table").First()
+	if statsTable == nil {
+		err = fmt.Errorf("cannot find music_detail_table")
+		return
+	}
 
-	doc, err := util.GetPageContentAsGoQuery(client.Client, recentSongsUri)
+	timeFormat := "2006-01-02 15:04:05"
+	timeLocation, err := time.LoadLocation("Asia/Tokyo")
 	if err != nil {
-		glog.Errorf("failed recentscores for %s: %s\n", client.GetUsername(), err.Error())
-		return nil, err
+		glog.Warningln("failed to load timezone location Asia/Tokyo")
+		return
 	}
 
-	table := doc.Find("table#data_tbl")
-	if table.Length() == 0 {
-		glog.Errorf("failed recentscores for %s: could not find data_tbl\n", client.GetUsername())
-		return nil, fmt.Errorf("could not find data_tbl")
+	details, err := util.TableThTd(statsTable)
+	if err != nil {
+		return
+	}
+	songStatistics.MaxCombo, err = strconv.Atoi(details["最大コンボ数"])
+	songStatistics.ClearCount, err = strconv.Atoi(details["クリア回数"])
+	songStatistics.PlayCount, err = strconv.Atoi(details["プレー回数"])
+	songStatistics.BestScore, err = strconv.Atoi(details["ハイスコア"])
+	songStatistics.Rank = details["ハイスコア時のダンスレベル"]
+	songStatistics.Lamp = details["フルコンボ種別"]
+	songStatistics.LastPlayed, err = time.ParseInLocation(timeFormat, details["最終プレー時間"], timeLocation)
+
+	if err != nil {
+		return
 	}
 
+	songStatistics.SongId = difficulty.SongId
+	songStatistics.Mode = difficulty.Mode
+	songStatistics.Difficulty = difficulty.Difficulty
 
-	tableBody := table.First().Find("tbody").First()
-	if tableBody == nil {
-		glog.Errorf("failed recentscores for %s: could not find table body\n", client.GetUsername())
-		return nil, fmt.Errorf("could not find table body")
+	songStatistics.PlayerCode = playerCode
+	return
+}
+
+func RecentScoresForClient(client util.EaClient, playerCode int) (scores []ddr_models.Score, err error) {
+	document, err := recentScoresDocument(client)
+	if err != nil {
+		return
+	}
+	scores, err = recentScoresFromDocument(document, playerCode)
+	return
+}
+
+// TODO: error handling
+func recentScoresFromDocument(document *goquery.Document, playerCode int) (scores []ddr_models.Score, err error) {
+	timeFormat := "2006-01-02 15:04:05"
+	timeLocation, err := time.LoadLocation("Asia/Tokyo")
+	if err != nil {
+		return
 	}
 
-	tableBody.Find("tr").Each(func(i int, s *goquery.Selection) {
-		if s.Find("td").Length() > 0 {
-			var score ddr_models.Score
-			info := s.Find("a.music_info.cboxelement").First()
-			href, exists := info.Attr("href")
-			if exists {
-				difficulty, err := strconv.Atoi(href[len(href)-1:])
-				if err == nil {
-					score.Mode = ddr_models.Mode(difficulty / 5).String()
-					if ddr_models.StringToMode(score.Mode) == ddr_models.Double {
-						difficulty++
-					}
-					score.Difficulty = ddr_models.Difficulty(difficulty % 5).String()
-					score.SongId = href[strings.Index(href, "=")+1 : strings.Index(href, "&")]
-				} else {
-					glog.Errorf("strconv failed: %s\n", err.Error())
-				}
-			}
-			score.Score, _ = strconv.Atoi(s.Find("td.score").First().Text())
-
-			format := "2006-01-02 15:04:05"
-			timeSelection := s.Find("td.date").First()
-
-			loc, err := time.LoadLocation("Asia/Tokyo")
-			t, err := time.ParseInLocation(format, timeSelection.Text(), loc)
-			if err == nil {
-				score.TimePlayed = t
-			}
-
-			rankSelection := s.Find("td.rank").First()
-			imgSelection := rankSelection.Find("img").First()
-			path, exists := imgSelection.Attr("src")
-			if exists {
-				score.ClearStatus = !strings.Contains(path, "rank_s_e")
-			}
-
-			score.PlayerCode = playerCode
-
-			recentScores = append(recentScores, score)
+	document.Find("table#data_tbl tbody tr").Each(func(i int, s *goquery.Selection) {
+		if s.Find("td").Length() == 0 {
+			return
 		}
+
+		score := ddr_models.Score{}
+
+		info := s.Find("a.music_info.cboxelement").First()
+		href, exists := info.Attr("href")
+		if !exists {
+			return
+		}
+		difficulty, err := strconv.Atoi(href[len(href)-1:])
+		if err != nil {
+			glog.Errorf("strconv failed: %s\n", err.Error())
+			return
+		}
+
+		score.Mode = ddr_models.Mode(difficulty / 5).String()
+		if ddr_models.StringToMode(score.Mode) == ddr_models.Double {
+			difficulty++
+		}
+		score.Difficulty = ddr_models.Difficulty(difficulty % 5).String()
+		score.SongId = href[strings.Index(href, "=")+1 : strings.Index(href, "&")]
+
+		score.Score, _ = strconv.Atoi(s.Find("td.score").First().Text())
+
+		timeSelection := s.Find("td.date").First()
+		t, err := time.ParseInLocation(timeFormat, timeSelection.Text(), timeLocation)
+		if err != nil {
+			return
+		}
+		score.TimePlayed = t
+
+		rankSelection := s.Find("td.rank").First()
+		imgSelection := rankSelection.Find("img").First()
+		path, exists := imgSelection.Attr("src")
+		if exists {
+			score.ClearStatus = !strings.Contains(path, "rank_s_e")
+		}
+
+		score.PlayerCode = playerCode
+
+		scores = append(scores, score)
 	})
 
-	glog.Infof("recentscores loaded for for %s (%d scores)\n", client.GetUsername(), len(recentScores))
-	return &recentScores, nil
+	return
 }
 
-func WorkoutData(client util.EaClient, playerCode int) ([]ddr_models.WorkoutData, error) {
-	glog.Infof("loading workoutdata for user %s (playercode %d)\n", client.GetUsername(), playerCode)
-	const workoutResource = "/game/ddr/ddra20/p/playdata/workout.html"
-
-	workoutUri := util.BuildEaURI(workoutResource)
-
-	workoutData := make([]ddr_models.WorkoutData, 0)
-
-	doc, err := util.GetPageContentAsGoQuery(client.Client, workoutUri)
+func WorkoutDataForClient(client util.EaClient, playerCode int) (workoutData []ddr_models.WorkoutData, err error) {
+	document, err := workoutDocument(client)
 	if err != nil {
-		glog.Errorf("failed workoutdata for %s: %s\n", client.GetUsername(), err.Error())
-		return workoutData, err
+		return
 	}
+	workoutData, err = workoutDataFromDocument(document, playerCode)
+	return
+}
 
-	table := doc.Find("table#work_out_left")
+func workoutDataFromDocument(document *goquery.Document, playerCode int) (workoutData []ddr_models.WorkoutData, err error) {
+	format := "2006-01-02"
+	loc, err := time.LoadLocation("Asia/Tokyo")
+
+	table := document.Find("table#work_out_left")
 	if table.Length() == 0 {
-		glog.Errorf("failed workoutdata for %s: could not find work_out_left\n", client.GetUsername())
-		return workoutData, fmt.Errorf("could not find work_out_left")
+		err = fmt.Errorf("could not find work_out_left")
+		return
 	}
 
 	tableBody := table.First().Find("tbody").First()
 	if tableBody == nil {
-		glog.Errorf("failed workoutdata for %s: could not find table body\n", client.GetUsername())
-		return workoutData, fmt.Errorf("could not find table body")
+		err = fmt.Errorf("could not find table body")
+		return
 	}
 
 	tableBody.Find("tr").Each(func(i int, s *goquery.Selection) {
@@ -304,9 +312,6 @@ func WorkoutData(client util.EaClient, playerCode int) ([]ddr_models.WorkoutData
 			wd := ddr_models.WorkoutData{}
 			s.Find("td").Each(func(i int, dataSelection *goquery.Selection) {
 				if i == 1 {
-					format := "2006-01-02"
-
-					loc, err := time.LoadLocation("Asia/Tokyo")
 					t, err := time.ParseInLocation(format, dataSelection.Text(), loc)
 					if err == nil {
 						wd.Date = t
@@ -335,7 +340,5 @@ func WorkoutData(client util.EaClient, playerCode int) ([]ddr_models.WorkoutData
 			workoutData = append(workoutData, wd)
 		}
 	})
-
-	glog.Infof("workoutdata loaded for user %s (%d datapoints)\n", client.GetUsername(), len(workoutData))
-	return workoutData, nil
+	return
 }

@@ -4,7 +4,7 @@ go 1.13
 
 require (
 	github.com/PuerkitoBio/goquery v1.5.1
-	github.com/chris-sg/eagate_models v0.0.0-20200311061327-0b25012d3ff9
+	github.com/chris-sg/eagate_models v0.0.0-20200329054902-04df0781c4a3
 	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
 	github.com/jmoiron/sqlx v1.2.1-0.20191203222853-2ba0fc60eb4a // indirect
 	github.com/lib/pq v1.3.0 // indirect
