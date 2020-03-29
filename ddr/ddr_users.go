@@ -26,6 +26,8 @@ func PlayerInformationForClient(client util.EaClient) (playerDetails ddr_models.
 	if err != nil {
 		return
 	}
+	eaGateUser := client.GetUsername()
+	playerDetails.EaGateUser = &eaGateUser
 
 	return
 }

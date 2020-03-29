@@ -2,6 +2,7 @@ package ddr
 
 import (
 	"encoding/base64"
+	"fmt"
 	"github.com/chris-sg/eagate_models/ddr_models"
 	"github.com/golang/glog"
 	"io/ioutil"
@@ -24,6 +25,8 @@ func SongIdsForClient(client util.EaClient) (songIds []string, err error) {
 	}
 	pageCount := pageCountFromMusicDataDocument(musicDataDoc)
 
+	errCount := 0
+
 	wg := new(sync.WaitGroup)
 	wg.Add(pageCount)
 
@@ -33,6 +36,7 @@ func SongIdsForClient(client util.EaClient) (songIds []string, err error) {
 
 			musicDataDoc, err := musicDataSingleDocument(client, page)
 			if err != nil {
+				errCount++
 				glog.Errorf("failed to load musicDataSingleDocument for user %s page %d: %s\n", client.GetUsername(), page, err.Error())
 				return
 			}
@@ -47,6 +51,10 @@ func SongIdsForClient(client util.EaClient) (songIds []string, err error) {
 
 	wg.Wait()
 	glog.Infof("loaded %d song ids on user %s\n", len(songIds), client.GetUsername())
+
+	if errCount != 0 {
+		err = fmt.Errorf("failed to load %d/%d pages", errCount, pageCount)
+	}
 
 	return
 }
@@ -69,7 +77,7 @@ func pageCountFromMusicDataDocument(document *goquery.Document) (pageCount int) 
 	return
 }
 
-func SongDataForClient(client util.EaClient, songIds []string) (songs []ddr_models.Song) {
+func SongDataForClient(client util.EaClient, songIds []string) (songs []ddr_models.Song, err error) {
 	mtx := &sync.Mutex{}
 
 	wg := new(sync.WaitGroup)
@@ -99,6 +107,7 @@ func SongDataForClient(client util.EaClient, songIds []string) (songs []ddr_mode
 
 	if errCount > 0 {
 		glog.Warningf("failed %d/%d song ids for song data (user %s)\n", errCount, len(songIds), client.GetUsername())
+		err = fmt.Errorf("failed to load data for %d/%d songs", errCount, len(songIds))
 	}
 
 	return
@@ -131,7 +140,7 @@ func songDataFromDocument(document *goquery.Document, songId string) (song ddr_m
 	return
 }
 
-func SongDifficultiesForClient(client util.EaClient, songIds []string) (difficulties []ddr_models.SongDifficulty) {
+func SongDifficultiesForClient(client util.EaClient, songIds []string) (difficulties []ddr_models.SongDifficulty, err error) {
 	mtx := &sync.Mutex{}
 
 	wg := new(sync.WaitGroup)
@@ -161,6 +170,7 @@ func SongDifficultiesForClient(client util.EaClient, songIds []string) (difficul
 
 	if errCount > 0 {
 		glog.Warningf("failed %d/%d song ids for song data (user %s)\n", errCount, len(songIds), client.GetUsername())
+		err = fmt.Errorf("failed to load data for %d/%d  songs", errCount, len(songIds))
 	}
 
 	return

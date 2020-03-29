@@ -151,7 +151,7 @@ func SolveCaptcha(captchaData Captcha) (session string, correct string, err erro
 		re := regexp.MustCompile("[A-Fa-f0-9]{32}")
 		match := re.FindStringSubmatch(captchaData.Data.CorrectPic)
 
-		glog.Errorf("captcha failed due to missing character key %s with md5 %x", match[0], correctPicMD5)
+		glog.Errorf("captcha failed due to missing character key %s with md5 %s", match[0], correctPicMD5)
 		return "", "", fmt.Errorf("character key %s md5 %s was not found", match[0], correctPicMD5)
 	}
 

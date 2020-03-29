@@ -189,7 +189,10 @@ func TestSongDataForClient(t *testing.T) {
 		},
 	}
 
-	songData := SongDataForClient(c, songIds)
+	songData, err := SongDataForClient(c, songIds)
+	if err != nil {
+		t.Fatal("error loading song data for client")
+	}
 
 	for _, data := range songData {
 		found := false
@@ -428,7 +431,10 @@ func TestSongDifficultiesForClient(t *testing.T) {
 		},
 	}
 
-	songDifficulties := SongDifficultiesForClient(c, songIds)
+	songDifficulties, err := SongDifficultiesForClient(c, songIds)
+	if err != nil {
+		t.Fatal("error loading song difficulties for client")
+	}
 
 	for _, data := range songDifficulties {
 		found := false
