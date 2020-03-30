@@ -30,7 +30,10 @@ func musicDetailDifficultyDocument(client util.EaClient, songId string, mode ddr
 	const baseDetail = "/game/ddr/ddra20/p/playdata/music_detail.html?index={id}&diff={diff}"
 	musicDetailURI := util.BuildEaURI(baseDetail)
 
-	difficultyId := (int(difficulty) * (int(mode) + 1)) - int(mode)
+	difficultyId := int(difficulty)
+	if mode == ddr_models.Double {
+		difficultyId += 4
+	}
 
 	musicDetailURI = strings.Replace(musicDetailURI, "{id}", songId, -1)
 	musicDetailURI = strings.Replace(musicDetailURI, "{diff}", strconv.Itoa(difficultyId), -1)

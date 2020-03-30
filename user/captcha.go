@@ -106,6 +106,11 @@ func GetCookieFromEaGate(username string, password string, otp string, client ut
 		return nil, err
 	}
 
+	if !client.LoginState() {
+		err = fmt.Errorf("login attempt failed")
+		return nil, err
+	}
+
 	cookies := res.Cookies()
 
 	if len(cookies) == 0 {
