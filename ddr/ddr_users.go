@@ -163,6 +163,8 @@ func SongStatisticsForClient(client util.EaClient, charts []ddr_models.SongDiffi
 		}(chart)
 	}
 
+	wg.Wait()
+
 	if errCount > 0 {
 		glog.Warningf("failed loading all statistic for %s:  %d of %d errors\n", client.GetUsername(), errCount, len(charts))
 		err = fmt.Errorf("failed to load %d of %d chart statistics", errCount, len(charts))
