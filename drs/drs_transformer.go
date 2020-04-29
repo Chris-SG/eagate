@@ -10,7 +10,7 @@ import (
 func Transform(dancerInfo drs_models.DancerInfo, musicData drs_models.MusicData, playHist drs_models.PlayHist) (pd drs_models.PlayerDetails, pps drs_models.PlayerProfileSnapshot, s []drs_models.Song, d []drs_models.Difficulty, pss []drs_models.PlayerSongStats, ps []drs_models.PlayerScore) {
 	pd = drs_models.PlayerDetails{
 		Code:       musicData.Data.PlayerData.UserId.Code,
-		Name:       dancerInfo.Data.EaSite.Name,
+		Name:       dancerInfo.Data.EaSite.Profile.Name,
 		EaGateUser: nil,
 	}
 	
