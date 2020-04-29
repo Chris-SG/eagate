@@ -35,7 +35,7 @@ func Transform(dancerInfo drs_models.DancerInfo, musicData drs_models.MusicData,
 			License:        songDetails.Info.License,
 		}
 		s = append(s, song)
-		for diffType, rawDiff := range songDetails.Difficulties.Difficulties {
+		for diffType, rawDiff := range songDetails.Difficulties {
 			if !strings.HasPrefix(diffType, "fumen_") {
 				glog.Warningf("diff field for %s does not have prefix, instead %s\n", songId, diffType)
 				continue
