@@ -22,7 +22,7 @@ func Transform(dancerInfo drs_models.DancerInfo, musicData drs_models.MusicData,
 		PlayerCode:  musicData.Data.PlayerData.UserId.Code,
 	}
 	
-	for songId, songDetails := range musicData.Data.PlayerData.MusicDb.SongEntries {
+	for songId, songDetails := range musicData.Data.PlayerData.MusicDb {
 		song := drs_models.Song{
 			SongId:         songId,
 			SongName:       songDetails.Info.TitleName,
@@ -149,6 +149,10 @@ func Transform(dancerInfo drs_models.DancerInfo, musicData drs_models.MusicData,
 			recentScore.P2Greats = &score.Player2.Great
 			recentScore.P2Goods = &score.Player2.Good
 			recentScore.P2Bads = &score.Player2.Bad
+		}
+
+		if len(score.VideoUrl) > 0 {
+			recentScore.VideoUrl = &score.VideoUrl
 		}
 
 		ps = append(ps, recentScore)
