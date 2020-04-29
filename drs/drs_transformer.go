@@ -19,6 +19,7 @@ func Transform(dancerInfo drs_models.DancerInfo, musicData drs_models.MusicData,
 		PlaySeconds: dancerInfo.Data.EaSite.Statistics.PlaySecs,
 		TotalStars:  dancerInfo.Data.EaSite.Coins.Total,
 		UsedStars:   dancerInfo.Data.EaSite.Coins.Used,
+		LastPlayed:  time.Unix(0, playHist.Data.PlayerData.MusicHistory.Music[0].LastPlayDate*1000000),
 		PlayerCode:  musicData.Data.PlayerData.UserId.Code,
 	}
 	
